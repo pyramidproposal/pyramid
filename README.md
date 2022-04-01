@@ -1,7 +1,7 @@
 # Pyramid Proposal
 
 This repository contains four implementations conform the Pyramid proposal.
-The pyramid proposal is part of the thesis titled 
+The Pyramid proposal is part of the thesis titled 
 "Proposal for a Pyramid scheme".
 NFS-Naive and FS-StackRestore are stepping-stone implementations; 
 these do not use a tree-traversal algorithm and are therefore not efficient.
