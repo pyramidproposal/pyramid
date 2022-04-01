@@ -1,0 +1,96 @@
+require "sha256.jahh"
+require "bigendian_32.jahh"
+
+param int INLEN = 56; /* In bytes. */
+param int SHA256_ISS = 64;
+
+inline fn sha256_INLEN(reg ptr u8[32] output, reg const ptr u8[INLEN] input) -> reg ptr u8[32]
+{
+  inline int i j;
+  inline int iterations handled remainder;
+  reg u8 t8;
+  reg u32 t32;
+  stack u8[SHA256_ISS] t;
+  stack u32[8] H;
+  stack u32[16] M;
+
+  stack ptr u8[32] s_output;
+
+  iterations = INLEN / SHA256_ISS;
+  handled = iterations * SHA256_ISS;
+  remainder = INLEN - handled;
+
+  /* Spill output pointer. */
+  s_output = output;
+
+  /* 1. Set the initial hash value, H(0), as specified in Sec. 5.3.3. */
+  for i = 0 to 8 {
+    t32 = IV[i];
+    H[i] = t32;
+  }
+
+  /* Hash message blocks without padding. */
+  for j = 0 to iterations {
+    for i = 0 to (SHA256_ISS / 4) {
+      t32 = load32(input[j * SHA256_ISS + 4 * i:4]);
+      M[i] = t32;
+    }
+
+    H = iterate_hash(M, H);
+  }
+
+  /* Padding zeroes. */
+  for i = 0 to SHA256_ISS {
+    t[i] = 0;
+  }
+
+  /* Copy message remainder. */
+  for i = 0 to remainder {
+    t8 = input[handled + i];
+    t[i] = t8;
+  }
+
+  /* Append the bit “1” to the end of the message. */
+  t[remainder] = 0x80;
+
+  /* Conditional: padding requires another block. */
+  /* 8: message length; 1: 1-bit byte. */
+  if((remainder + 8 + 1) > SHA256_ISS){
+	
+    for i = 0 to (SHA256_ISS / 4) {
+      t32 = load32(t[4 * i:4]);
+      M[i] = t32;
+    }
+		
+    H = iterate_hash(M, H);
+
+    for i = 0 to remainder {
+        t[i] = 0;
+    }
+  }
+
+  /* 64-bit  block  that  is  equal  to  the  number l, 
+     expressed using a  binary  representation */
+  for i = 0 to 8 {
+    t[SHA256_ISS - 1 - i] = (INLEN*8) >> 8*i;
+  }
+
+  /* Hash final padded message block. */
+  for i = 0 to (SHA256_ISS / 4) {
+    t32 = load32(t[4 * i:4]);
+    M[i] = t32;
+  }
+
+  H = iterate_hash(M, H);
+
+  /* Pop output pointer. */
+  output = s_output;
+
+  /* Resulting 256-bit message digest. */
+  for i = 0 to 8 {
+    t32 = H[i];
+    output[4*i:4] = store32(output[4*i:4], t32);
+  }
+
+  return output;
+}

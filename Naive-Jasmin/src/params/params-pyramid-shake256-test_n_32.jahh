@@ -1,0 +1,92 @@
+param int PYR_N             = 32;
+param int PYR_FULL_HEIGHT   = 16;
+param int PYR_D             = 4;
+param int PYR_WOTS_W        = 16;
+
+param int PYR_ADDR_BYTES    = 32; /* Explicit. */
+param int PYR_IDX_BYTES     = (PYR_FULL_HEIGHT + 7) / 8;
+
+param int PYR_WOTS_LOGW     = 4;
+
+param int PYR_WOTS_LEN1     = 8 * PYR_N / PYR_WOTS_LOGW;
+param int PYR_WOTS_LEN2     = 3;
+
+param int PYR_WOTS_LEN      = PYR_WOTS_LEN1 + PYR_WOTS_LEN2;
+param int PYR_WOTS_BYTES    = PYR_WOTS_LEN * PYR_N;
+param int PYR_WOTS_PK_BYTES = PYR_WOTS_BYTES;
+
+param int PYR_TREE_HEIGHT   = PYR_FULL_HEIGHT / PYR_D;
+
+param int PYR_SK_CORE_BYTES = 4*PYR_N + PYR_IDX_BYTES;
+param int PYR_BYTES = PYR_IDX_BYTES + PYR_D * PYR_WOTS_BYTES 
+		      + (PYR_FULL_HEIGHT + 1) * PYR_N;
+param int PYR_PK_BYTES      = 2 * PYR_N;
+param int PYR_SK_BYTES      = PYR_SK_CORE_BYTES;
+
+/* Additional */
+/* Hash instantiations input length. */
+param int PRF_INLEN        = (2*PYR_N + 32);
+param int HPRG_INLEN       = (2*PYR_N + 32);
+param int HMSG_CONST_INLEN = (2*PYR_N + 32);
+
+/* thash simple */
+param int TH_INLEN     = PYR_N + 32;
+param int TH1_INLEN    = TH_INLEN + PYR_N;
+param int TH2_INLEN    = TH_INLEN + 2*PYR_N;
+param int THLEN_INLEN  = TH_INLEN + PYR_WOTS_BYTES;
+
+/* thash robust */
+param int MASK_INLEN = TH_INLEN;
+
+/* Address */
+param int PYR_ADDR_TYPE_WOTS     = 0;
+param int PYR_ADDR_TYPE_WOTSPK   = 1;
+param int PYR_ADDR_TYPE_HASHTREE = 2;
+
+param int PYR_ADDR_TYPE_HMSG     = 3;
+param int PYR_ADDR_TYPE_PRF      = 4;
+param int PYR_ADDR_TYPE_PRFKG    = 5;
+param int PYR_ADDR_TYPE_FSG      = 6;
+
+/* Shake256 rate.. */
+param int SHAKE128_RATE = 168;
+param int SHAKE256_RATE = 136;
+param int SHA3_256_RATE = 136;
+param int SHA3_512_RATE = 72;
+
+/* Shake256 offsets. */
+param int PYR_OFFSET_LAYER      = 3;
+param int PYR_OFFSET_TREE       = 8;
+param int PYR_OFFSET_TYPE       = 19;
+param int PYR_OFFSET_KP_ADDR2   = 22;
+param int PYR_OFFSET_KP_ADDR1   = 23;
+param int PYR_OFFSET_CHAIN_ADDR = 27;
+param int PYR_OFFSET_HASH_ADDR  = 31;
+param int PYR_OFFSET_TREE_HGT   = 27;
+param int PYR_OFFSET_TREE_INDEX = 28;
+
+/* WOTS */
+param int CSUM_BYTES = (PYR_WOTS_LEN2 * PYR_WOTS_LOGW + 7) / 8;
+param int CTR_BYTES  = (PYR_WOTS_LEN + 255) / 256;
+
+/* Merkle */
+param int AUTH_BYTES = PYR_TREE_HEIGHT * PYR_N;
+
+/* SK format */
+param int SK_IDX   = 0;                      /* leaf InDeX  */
+param int SK_SSD   = SK_IDX + PYR_IDX_BYTES; /* Secret SeeD */
+param int SK_PRF   = SK_SSD + PYR_N;         /* PRF key     */
+param int SK_PRT   = SK_PRF + PYR_N;         /* Public RooT */
+param int SK_PSD   = SK_PRT + PYR_N;         /* Public SeeD */
+
+
+/* PK format */
+param int PK_RT    = 0;                      /* RooT */
+param int PK_SD    = PK_RT + PYR_N;          /* SeeD */
+
+/* SIG format */
+param int SIG_IDX  = 0;
+param int SIG_RND  = SIG_IDX + PYR_IDX_BYTES;
+param int SIG_HTS  = SIG_RND + PYR_N;
+
+param int CRYPTO_SEEDBYTES = 3*PYR_N;

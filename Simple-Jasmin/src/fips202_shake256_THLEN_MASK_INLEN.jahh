@@ -1,0 +1,51 @@
+require "pyramid_params.jahh"
+require "fips202_keccak_absorb_256_MASK_INLEN.jahh"
+require "fips202_keccak_squeezeblocks_256_THLEN.jahh"
+require "fips202_keccak_squeezeblocks_256_256.jahh"
+
+inline fn shake256_THLEN_MASK_INLEN(reg ptr u8[PYR_WOTS_BYTES] output, reg ptr u8[MASK_INLEN] input) -> reg ptr u8[PYR_WOTS_BYTES]
+{
+	inline int i;
+	inline int nblocks;
+	inline int handled;
+	inline int remainder;
+
+	reg u8 t8;
+
+	stack u8[SHAKE256_RATE] t;
+
+	stack u64[25] s;
+
+	stack ptr u8[PYR_WOTS_BYTES] s_output;
+
+	nblocks = PYR_WOTS_BYTES / SHAKE256_RATE;
+	handled = nblocks * SHAKE256_RATE;
+	remainder = PYR_WOTS_BYTES - handled;
+
+	s_output = output;
+
+	for i = 0 to 25 {
+		s[i] = 0;
+	}
+
+	s = keccak_absorb_256_MASK_INLEN(s, input);
+
+	output = s_output;
+
+	output, s = keccak_squeezeblocks_256_THLEN(output, s);
+
+	s_output = output;
+
+	if(remainder > 0){
+		t, s = keccak_squeezeblocks_256_256(t, s);
+	}
+
+	output = s_output;
+
+	for i = 0 to remainder {
+		t8 = t[i];
+		output[handled + i] = t8;
+	}
+
+	return output;
+}

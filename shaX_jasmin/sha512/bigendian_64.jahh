@@ -1,0 +1,54 @@
+inline fn load64(reg ptr u8[8] x) -> reg u64{
+  inline int i;
+
+  reg u64 res tmp;
+
+  res = (64u)x[7];
+  
+  for i = 0 to 7 {
+    tmp = (64u)x[i];
+    tmp <<= 8*(7 - i);
+    res |= tmp;
+  }
+
+  return res;
+}
+
+inline fn load64_in(reg u64 x) -> reg u64
+{
+  inline int i;
+  reg u8 t8;
+  reg u64 res t64;
+
+  t8 = (u8)[x];
+  t64 = (64u)t8;
+  res = t64;
+  res <<= 8;
+
+  for i = 1 to 7 {
+    t8 = (u8)[x + i];
+    t64 = (64u)t8;
+    res |= t64;
+    res <<= 8;
+  }
+  
+  t8 = (u8)[x + 7];
+  t64 = (64u)t8;
+  res |= t64;
+
+  return res;
+}
+
+inline fn store64(reg ptr u8[8] x, reg u64 u) -> reg ptr u8[8]
+{
+  inline int i;
+	
+  for i = 7 downto 0 {
+    x[i] = u;
+    u >>= 8;
+  }
+	
+  x[0] = u;
+
+  return x;
+}

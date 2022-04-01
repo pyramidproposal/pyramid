@@ -1,0 +1,419 @@
+require "pyramid_params.jahh"
+require "pyr_address.jahh"
+
+export fn set_layer_addr_jazz(reg u64 addrp, reg u32 val)
+{
+	inline int i;
+
+	reg u32 a;
+
+	stack u32[8] addr;
+
+	stack u64 s_addrp;
+
+	for i = 0 to 8 {
+		a = (u32) [addrp + 4 * i];
+		addr[i] = a;
+	}
+
+	s_addrp = addrp;
+
+	addr = set_layer_addr(addr, val);
+
+	addrp = s_addrp;
+
+	for i = 0 to 8 {
+		a = addr[i];
+		(u32) [addrp + 4 * i] = a;
+	}
+}
+
+export fn set_tree_addr_jazz(reg u64 addrp, reg u64 val)
+{
+	inline int i;
+
+	reg u32 a;
+
+	stack u32[8] addr;
+
+	stack u64 s_addrp;
+
+	for i = 0 to 8 {
+		a = (u32) [addrp + 4 * i];
+		addr[i] = a;
+	}
+
+	s_addrp = addrp;
+
+	addr = set_tree_addr(addr, val);
+
+	addrp = s_addrp;
+
+	for i = 0 to 8 {
+		a = addr[i];
+		(u32) [addrp + 4 * i] = a;
+	}
+}
+
+export fn set_type_0xff_jazz(reg u64 addrp)
+{
+	inline int i;
+
+	reg u32 a;
+
+	stack u32[8] addr;
+
+	stack u64 s_addrp;
+
+	for i = 0 to 8 {
+		a = (u32) [addrp + 4 * i];
+		addr[i] = a;
+	}
+
+	s_addrp = addrp;
+
+	addr = set_type(addr, 0xff);
+
+	addrp = s_addrp;
+
+	for i = 0 to 8 {
+		a = addr[i];
+		(u32) [addrp + 4 * i] = a;
+	}
+}
+
+export fn copy_subtree_addr_jazz(reg u64 out_addrp, reg u64 in_addrp)
+{
+	inline int i;
+
+	reg u32 a;
+
+	stack u32[8] out_addr in_addr;
+
+	stack u64 s_out_addrp s_in_addrp;
+
+	for i = 0 to 8 {
+		a = (u32) [out_addrp + 4 * i];
+		out_addr[i] = a;
+	}
+	
+	for i = 0 to 8 {
+		a = (u32) [in_addrp + 4 * i];
+		in_addr[i] = a;
+	}
+
+	s_out_addrp = out_addrp;
+	s_in_addrp = in_addrp;
+
+	out_addr = copy_subtree_addr(out_addr, in_addr);
+
+	out_addrp = s_out_addrp;
+	in_addrp = s_in_addrp;
+
+	for i = 0 to 8 {
+		a = out_addr[i];
+		(u32) [out_addrp + 4 * i] = a;
+	}
+
+	for i = 0 to 8 {
+		a = in_addr[i];
+		(u32) [in_addrp + 4 * i] = a;
+	}
+}
+
+export fn set_keypair_addr_jazz(reg u64 addrp, reg u32 val)
+{
+	inline int i;
+
+	reg u32 a;
+
+	stack u32[8] addr;
+
+	stack u64 s_addrp;
+
+	for i = 0 to 8 {
+		a = (u32) [addrp + 4 * i];
+		addr[i] = a;
+	}
+
+	s_addrp = addrp;
+
+	addr = set_keypair_addr(addr, val);
+
+	addrp = s_addrp;
+
+	for i = 0 to 8 {
+		a = addr[i];
+		(u32) [addrp + 4 * i] = a;
+	}
+}
+
+export fn copy_keypair_addr_jazz(reg u64 out_addrp, reg u64 in_addrp)
+{
+	inline int i;
+
+	reg u32 a;
+
+	stack u32[8] out_addr in_addr;
+
+	stack u64 s_out_addrp s_in_addrp;
+
+	for i = 0 to 8 {
+		a = (u32) [out_addrp + 4 * i];
+		out_addr[i] = a;
+	}
+	
+	for i = 0 to 8 {
+		a = (u32) [in_addrp + 4 * i];
+		in_addr[i] = a;
+	}
+
+	s_out_addrp = out_addrp;
+	s_in_addrp = in_addrp;
+
+	out_addr = copy_keypair_addr(out_addr, in_addr);
+
+	out_addrp = s_out_addrp;
+	in_addrp = s_in_addrp;
+
+	for i = 0 to 8 {
+		a = out_addr[i];
+		(u32) [out_addrp + 4 * i] = a;
+	}
+
+	for i = 0 to 8 {
+		a = in_addr[i];
+		(u32) [in_addrp + 4 * i] = a;
+	}
+}
+
+export fn set_chain_addr_jazz(reg u64 addrp, reg u32 val)
+{
+	inline int i;
+
+	reg u32 a;
+
+	stack u32[8] addr;
+
+	stack u64 s_addrp;
+
+	for i = 0 to 8 {
+		a = (u32) [addrp + 4 * i];
+		addr[i] = a;
+	}
+
+	s_addrp = addrp;
+
+	addr = set_chain_addr(addr, val);
+
+	addrp = s_addrp;
+
+	for i = 0 to 8 {
+		a = addr[i];
+		(u32) [addrp + 4 * i] = a;
+	}
+}
+
+export fn set_hash_addr_jazz(reg u64 addrp, reg u32 val)
+{
+	inline int i;
+
+	reg u32 a;
+
+	stack u32[8] addr;
+
+	stack u64 s_addrp;
+
+	for i = 0 to 8 {
+		a = (u32) [addrp + 4 * i];
+		addr[i] = a;
+	}
+
+	s_addrp = addrp;
+
+	addr = set_hash_addr(addr, val);
+
+	addrp = s_addrp;
+
+	for i = 0 to 8 {
+		a = addr[i];
+		(u32) [addrp + 4 * i] = a;
+	}
+}
+
+export fn set_tree_height_jazz(reg u64 addrp, reg u32 val)
+{
+	inline int i;
+
+	reg u32 a;
+
+	stack u32[8] addr;
+
+	stack u64 s_addrp;
+
+	for i = 0 to 8 {
+		a = (u32) [addrp + 4 * i];
+		addr[i] = a;
+	}
+
+	s_addrp = addrp;
+
+	addr = set_tree_height(addr, val);
+
+	addrp = s_addrp;
+
+	for i = 0 to 8 {
+		a = addr[i];
+		(u32) [addrp + 4 * i] = a;
+	}
+}
+
+export fn set_tree_index_jazz(reg u64 addrp, reg u32 val)
+{
+	inline int i;
+
+	reg u32 a;
+
+	stack u32[8] addr;
+
+	stack u64 s_addrp;
+
+	for i = 0 to 8 {
+		a = (u32) [addrp + 4 * i];
+		addr[i] = a;
+	}
+
+	s_addrp = addrp;
+
+	addr = set_tree_index(addr, val);
+
+	addrp = s_addrp;
+
+	for i = 0 to 8 {
+		a = addr[i];
+		(u32) [addrp + 4 * i] = a;
+	}
+}
+
+export fn get_tree_addr_jazz(reg u64 addrp)
+-> reg u64
+{
+	inline int i;
+
+	reg u32 a;
+
+	stack u32[8] addr;
+
+	reg u64 ret;
+
+	for i = 0 to 8 {
+		a = (u32) [addrp + 4 * i];
+		addr[i] = a;
+	}
+
+	ret = get_tree_addr(addr);
+
+	return ret;
+}
+
+export fn get_keypair_addr_jazz(reg u64 addrp)
+-> reg u32
+{
+	inline int i;
+
+	reg u32 a;
+
+	stack u32[8] addr;
+
+	reg u32 ret;
+
+	for i = 0 to 8 {
+		a = (u32) [addrp + 4 * i];
+		addr[i] = a;
+	}
+
+	ret = get_keypair_addr(addr);
+
+	return ret;
+}
+
+export fn set_keypair_addr_bottom_jazz(reg u64 addrp, reg u64 val)
+{
+	inline int i;
+
+	reg u32 a;
+
+	stack u32[8] addr;
+
+	stack u64 s_addrp;
+
+	for i = 0 to 8 {
+		a = (u32) [addrp + 4 * i];
+		addr[i] = a;
+	}
+
+	s_addrp = addrp;
+
+	addr = set_keypair_addr_bottom(addr, val);
+
+	addrp = s_addrp;
+
+	for i = 0 to 8 {
+		a = addr[i];
+		(u32) [addrp + 4 * i] = a;
+	}
+}
+
+export fn increment_address_jazz(reg u64 addrp)
+{
+	inline int i;
+
+	reg u32 a;
+
+	stack u32[8] addr;
+
+	stack u64 s_addrp;
+
+	for i = 0 to 8 {
+		a = (u32) [addrp + 4 * i];
+		addr[i] = a;
+	}
+
+	s_addrp = addrp;
+
+	addr = increment_address(addr);
+
+	addrp = s_addrp;
+
+	for i = 0 to 8 {
+		a = addr[i];
+		(u32) [addrp + 4 * i] = a;
+	}
+}
+
+export fn set_direction_jazz(reg u64 addrp, reg u32 val)
+{
+	inline int i;
+
+	reg u32 a;
+
+	stack u32[8] addr;
+
+	stack u64 s_addrp;
+
+	for i = 0 to 8 {
+		a = (u32) [addrp + 4 * i];
+		addr[i] = a;
+	}
+
+	s_addrp = addrp;
+
+	addr = set_direction(addr, val);
+
+	addrp = s_addrp;
+
+	for i = 0 to 8 {
+		a = addr[i];
+		(u32) [addrp + 4 * i] = a;
+	}
+}

@@ -1,0 +1,49 @@
+require "pyramid_params.jahh"
+
+/* BDS Treehash instance */
+/* Size */
+param int BDS_TH_NDE_SIZE = PYR_TREE_HEIGHT * PYR_N;
+param int BDS_TH_FIN_SIZE = PYR_TREE_HEIGHT * 1;
+param int BDS_TH_IDX_SIZE = PYR_TREE_HEIGHT * PYR_IDX_BYTES;
+param int BDS_TH_SDA_SIZE = PYR_TREE_HEIGHT * PYR_N;
+param int BDS_TH_SDN_SIZE = PYR_TREE_HEIGHT * PYR_N;
+/* Offset */
+param int BDS_TH_NDE  = 0;
+param int BDS_TH_FIN  = BDS_TH_NDE + BDS_TH_NDE_SIZE;
+param int BDS_TH_IDX  = BDS_TH_FIN + BDS_TH_FIN_SIZE;
+param int BDS_TH_SDA  = BDS_TH_IDX + BDS_TH_IDX_SIZE;
+param int BDS_TH_SDN  = BDS_TH_SDA + BDS_TH_SDA_SIZE;
+param int BDS_TH_SIZE = BDS_TH_SDN + BDS_TH_SDN_SIZE;
+
+
+/* BDS Stack */
+/* Size */
+/* Note: other code will implicily use 1 byte for HGT/SZE. */
+param int BDS_ST_SZE_SIZE = 1;
+param int BDS_ST_NDE_SIZE = (PYR_TREE_HEIGHT - 1) * PYR_N;
+param int BDS_ST_HGT_SIZE = PYR_TREE_HEIGHT - 1;
+/* Offset */
+param int BDS_ST_SZE  = 0;
+param int BDS_ST_NDE  = BDS_ST_SZE + BDS_ST_SZE_SIZE;
+param int BDS_ST_HGT  = BDS_ST_NDE + BDS_ST_NDE_SIZE;
+param int BDS_ST_SIZE = BDS_ST_HGT + BDS_ST_HGT_SIZE;
+
+
+/* BDS State */
+/* Size */
+param int BDS_AUTH_SIZE = AUTH_BYTES;
+param int BDS_STCK_SIZE = BDS_ST_SIZE;
+param int BDS_TREE_SIZE = BDS_TH_SIZE;
+param int BDS_KEEP_SIZE = (PYR_TREE_HEIGHT / 2) * PYR_N;
+/* Offset */
+param int BDS_AUTH = 0;
+param int BDS_STCK = BDS_AUTH + BDS_AUTH_SIZE;
+param int BDS_TREE = BDS_STCK + BDS_STCK_SIZE;
+param int BDS_KEEP = BDS_TREE + BDS_TREE_SIZE;
+param int BDS_SIZE = BDS_KEEP + BDS_KEEP_SIZE;
+
+/* 
+  Note: sizes such as AUTH_BYTES from pyramid_params.jahh are still preferred over BDS_AUTH_SIZE, 
+  as this size is not 'BDS-specific'. The above is merely used to make the 
+  format clear (using these interchangeably can also lead to warnings).
+*/

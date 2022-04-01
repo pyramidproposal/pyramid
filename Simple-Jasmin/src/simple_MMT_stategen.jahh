@@ -1,0 +1,78 @@
+require "pyramid_params.jahh"
+require "pyr_address.jahh"
+require "utils.jahh"
+require "pyr_hash_shake256.jahh"
+require "simple_treehash.jahh"
+require "simple_MMT_state.jahh"
+require "simple_MMT_state_format.jahh"
+
+/* 
+    Generate an MMT state from the core of a Pyramid secret key.
+*/
+#[returnaddress="stack"]
+fn MMT_stategen(reg ptr u8[MMT_SIZE] state, reg const ptr u8[PYR_SK_CORE_BYTES] sk,
+       	  	reg u32 layer)
+-> reg ptr u8[MMT_SIZE]
+{
+    inline int i offset;
+    stack u32 [8] addr;
+    stack u8[PYR_N] next_ref;
+    stack u8[PYR_N] sk_ssd;
+    reg u8 t8;
+    reg u32 s t;
+
+    stack ptr u8[MMT_SIZE] s_state;
+    stack const ptr u8[PYR_SK_CORE_BYTES] s_sk;
+
+    s_state = state;
+    s_sk = sk;
+
+    /* Explicitly; already zero after init_addr. */
+    addr = init_addr(addr);
+    addr = set_layer_addr(addr, layer);
+    addr = set_tree_addr_(addr, 0);
+    addr = set_keypair_addr_(addr, 0);
+
+    /* The first FSG reference on hypertree layer layer. */
+    sk_ssd = SK_get_ssd(sk_ssd, sk, layer);
+
+    /* Forward the reference once; all authentication path nodes are right nodes. */
+    next_ref = fsg_1(next_ref, sk_ssd, sk[SK_PSD:PYR_N], addr);
+    /* FSG position: 1. */
+
+    state = s_state;
+
+    for i = 0 to PYR_TREE_HEIGHT {
+    	/* FSG position loop start: 2^i. */
+	addr = set_keypair_addr_(addr, 1 << i);
+
+	/* Initialize auth[i] */
+	offset = MMT_AUTH + i * PYR_N;
+	sk = s_sk;
+	s = (1 << i);
+	t = i;
+	state[offset:PYR_N], next_ref = treehash_comp(state[offset:PYR_N], next_ref,
+	                                               sk[SK_PSD:PYR_N], s, t, addr);
+        /* FSG position: 2^(i + 1). */
+
+	/* Initialize remaining Treehash[i] members. */
+        offset = MMT_TREE + MMT_TH_FIN + i;
+	state[offset] = 1;
+
+	offset = MMT_TREE + MMT_TH_IDX + i * PYR_IDX_BYTES;
+	state[offset:PYR_IDX_BYTES] = zero_IDX(state[offset:PYR_IDX_BYTES]);
+
+	offset = MMT_TREE + MMT_TH_SDA + i * PYR_N;
+	state[offset:PYR_N] = cpy_N(state[offset:PYR_N], next_ref);
+    }
+    /* FSG position: 2^PYR_TREE_HEIGHT, i.e. the first reference of the next tree. */
+
+    /* Start the bottom Treehash instance. */
+    offset = MMT_TREE + MMT_TH_FIN;
+    state[offset] = 0;
+
+    offset = MMT_STCK;
+    state[offset:MMT_ST_SIZE] = MMT_init_stack(state[offset:MMT_ST_SIZE]);
+
+    return state;
+}

@@ -1,0 +1,56 @@
+require "pyramid_params.jahh"
+require "pyr_compute_root.jahh"
+require "ABI_unpack.jahh"
+
+/* Other contains idx_leaf & t due to ABI limits: 
+   other = 32u idx_leaf || 32u t
+ */
+export fn compute_root_jazz(reg u64 rootp, reg u64 leafp, reg u64 auth_pathp,
+                            reg u64 pub_seedp, reg u64 subtree_addrp, reg u64 otherp)
+{
+	inline int i;
+
+	reg u8 a8;
+
+	reg u32 a32 t s;
+
+	stack u8[PYR_N] root leaf pub_seed;
+
+	stack u8[AUTH_BYTES] auth_path;
+
+	stack u32[8] subtree_addr;
+
+	stack u64 s_rootp;
+
+	for i = 0 to PYR_N {
+		a8 = (u8) [leafp + i];
+		leaf[i] = a8;
+	}
+
+	for i = 0 to AUTH_BYTES {
+		a8 = (u8) [auth_pathp + i];
+		auth_path[i] = a8;
+	}
+
+	for i = 0 to PYR_N {
+		a8 = (u8) [pub_seedp + i];
+		pub_seed[i] = a8;
+	}
+
+	for i = 0 to 8 {
+		a32 = (u32) [subtree_addrp + 4*i];
+		subtree_addr[i] = a32;
+	}
+
+	s, t = get_other(s, t, otherp);
+
+	s_rootp = rootp;
+
+	root = compute_root(root, leaf, auth_path, pub_seed, s, t, subtree_addr);
+	rootp = s_rootp;
+
+	for i = 0 to PYR_N {
+		a8 = root[i];
+		(u8) [rootp + i] = a8;
+	}
+}

@@ -1,0 +1,354 @@
+require "pyramid_params.jahh"
+require "utils.jahh"
+require "simple_BDS_state_utils.jahh"
+require "simple_BDS_state_format.jahh"
+
+/* 
+   Treehash GET/SET. 
+   Some functions remain unused "(Unused)", because the getter/setter require a runtime 
+   destination/source in the context that they are used in
+   (meaning: the source AND destination are only known at runtime).
+   When this is the case, the function that is used instead, 
+   is located in the file that uses it directly.
+*/
+
+/* (Unused) Copy node from the ith treehash instance of state into node.  */
+inline fn BDS_th_get_nde(reg ptr u8[PYR_N] node, reg ptr u8[BDS_SIZE] state, reg u64 i)
+-> reg ptr u8[PYR_N]
+{
+    reg u64 offset j;
+    offset = BDS_TREE + BDS_TH_NDE;
+    j = i;
+    j *= PYR_N;
+    offset += j;
+    node = BDS_cpy_N(node, state, offset);
+    return node;
+}
+
+/* Load fin from the ith treehash instance of state.  */
+inline fn BDS_th_get_fin(reg ptr u8[BDS_SIZE] state, reg u64 i)
+-> reg u8
+{
+    reg u64 offset;
+    reg u8 fin;
+    offset = BDS_TREE + BDS_TH_FIN;
+    /* fins are boolean, 1 byte each */
+    offset += i;
+    fin = state[(int)offset];
+    return fin;
+}
+
+/* Load idx from the ith treehash instance of state.  */
+inline fn BDS_th_get_idx(reg ptr u8[BDS_SIZE] state, reg u64 i)
+-> reg u64
+{
+    reg u64 offset j;
+    reg u64 idx;
+    offset = BDS_TREE + BDS_TH_IDX;
+    j = i;
+    j *= PYR_IDX_BYTES;
+    offset += j;
+    idx = BDS_btou64_idx(state, offset);
+    return idx;
+}
+
+/* Copy seed active from the ith treehash instance of state into sda.  */
+inline fn BDS_th_get_sda(reg ptr u8[PYR_N] sda, reg ptr u8[BDS_SIZE] state, reg u64 i)
+-> reg ptr u8[PYR_N]
+{
+    reg u64 offset j;
+    offset = BDS_TREE + BDS_TH_SDA;
+    j = i;
+    j *= PYR_N;
+    offset += j;
+    sda = BDS_cpy_N(sda, state, offset);
+    return sda;
+}
+
+/* (Unused) Copy seed next from the ith treehash instance of state into sdn.  */
+inline fn BDS_th_get_sdn(reg ptr u8[PYR_N] sdn, reg ptr u8[BDS_SIZE] state, reg u64 i)
+-> reg ptr u8[PYR_N]
+{
+    reg u64 offset j;
+    offset = BDS_TREE + BDS_TH_SDN;
+    j = i;
+    j *= PYR_N;
+    offset += j;
+    sdn = BDS_cpy_N(sdn, state, offset);
+    return sdn;
+}
+
+/* Copy node from node to the ith treehash instance of state.  */
+inline fn BDS_th_set_nde(reg ptr u8[BDS_SIZE] state, reg ptr u8[PYR_N] node, reg u64 i)
+-> reg ptr u8[BDS_SIZE]
+{
+    reg u64 offset j;
+    offset = BDS_TREE + BDS_TH_NDE;
+    j = i;
+    j *= PYR_N;
+    offset += j;
+    state = BDS_set_N(state, node, offset);
+    return state;
+}
+
+/* Overwrite fin in the ith treehash instance of state. */
+inline fn BDS_th_set_fin(reg ptr u8[BDS_SIZE] state, inline int fin, reg u64 i)
+-> reg ptr u8[BDS_SIZE]
+{
+    reg u64 offset;
+    offset = BDS_TREE + BDS_TH_FIN;
+    /* fins are boolean, 1 byte each */
+    offset += i;
+    state[(int)offset] = fin;
+    return state;
+}
+
+/* Overwrite idx in the ith treehash instance of state.  */
+inline fn BDS_th_set_idx(reg ptr u8[BDS_SIZE] state, reg u64 idx, reg u64 i)
+-> reg ptr u8[BDS_SIZE]
+{
+    reg u64 offset j;
+    offset = BDS_TREE + BDS_TH_IDX;
+    j = i;
+    j *= PYR_IDX_BYTES;
+    offset += j;
+    state = BDS_u64tob_idx(state, idx, offset);
+    return state;
+}
+
+/* Copy seed active from node to the ith treehash instance of state.  */
+inline fn BDS_th_set_sda(reg ptr u8[BDS_SIZE] state, reg ptr u8[PYR_N] node, reg u64 i)
+-> reg ptr u8[BDS_SIZE]
+{
+    reg u64 offset j;
+    offset = BDS_TREE + BDS_TH_SDA;
+    j = i;
+    j *= PYR_N;
+    offset += j;
+    state = BDS_set_N(state, node, offset);
+    return state;
+}
+
+/* (Unused) Copy seed next from node to the ith treehash instance of state.  */
+inline fn BDS_th_set_sdn(reg ptr u8[BDS_SIZE] state, reg ptr u8[PYR_N] sdn, reg u64 i)
+-> reg ptr u8[BDS_SIZE]
+{
+    reg u64 offset j;
+    offset = BDS_TREE + BDS_TH_SDN;
+    j = i;
+    j *= PYR_N;
+    offset += j;
+    state = BDS_set_N(state, sdn, offset);
+    return state;
+}
+
+/* 
+   Stack GET/SET
+*/
+
+/* Load the stack size. */
+inline fn BDS_st_get_size(reg ptr u8[BDS_ST_SIZE] stack_)
+-> reg u8
+{
+    reg u8 size;
+    size = stack_[BDS_ST_SZE];
+    return size;
+}
+
+/* Load the height of the ith node on the stack. */
+inline fn BDS_st_get_height(reg ptr u8[BDS_ST_SIZE] stack_, reg u64 i)
+-> reg u8
+{
+    reg u8 height;
+    /* heights are 1 byte each */
+    height = stack_[BDS_ST_HGT + (int)i];
+    return height;
+}
+
+/* Store the stack size. */
+inline fn BDS_st_set_size(reg ptr u8[BDS_ST_SIZE] stack_, reg u8 size)
+-> reg ptr u8[BDS_ST_SIZE]
+{
+    stack_[BDS_ST_SZE] = size;
+    return stack_;
+}
+
+/* Store the height of the ith node on the stack. */
+inline fn BDS_st_set_height(reg ptr u8[BDS_ST_SIZE] stack_, reg u8 height, reg u64 i)
+-> reg ptr u8[BDS_ST_SIZE]
+{
+    /* heights are 1 byte each */
+    stack_[BDS_ST_HGT + (int)i] = height;
+    return stack_;
+}
+
+/* 
+   Stack POP/PUSH
+*/
+
+/* Pop operation. */
+inline fn BDS_stack_pop(reg ptr u8[PYR_N] pop_node, reg ptr u8[BDS_ST_SIZE] stack_)
+-> reg ptr u8[PYR_N], reg ptr u8[BDS_ST_SIZE]
+{
+    reg u8 size;
+    reg ptr u8[BDS_ST_NDE_SIZE] nodes;
+    reg u64 offset;
+
+    /* Decrement size */
+    size = BDS_st_get_size(stack_);
+    size -= 1;
+    stack_ = BDS_st_set_size(stack_, size);
+
+    /* Copy node into pop_node */
+    nodes = stack_[BDS_ST_NDE:BDS_ST_NDE_SIZE];
+    offset = (64u)size;
+    offset *= PYR_N;
+    pop_node = BDS_st_get_N(pop_node, nodes, offset);
+
+    /* Clear the stack copy. */
+    nodes = BDS_st_clr_N(nodes, offset);
+    stack_[BDS_ST_NDE:BDS_ST_NDE_SIZE] = nodes;
+
+    /* Clear the node height. */
+    offset = (64u)size;
+    stack_[BDS_ST_HGT + (int)offset] = 0;
+
+    return pop_node, stack_;
+}
+
+/* Push operation. */
+inline fn BDS_stack_push(reg ptr u8[BDS_ST_SIZE] stack_, reg ptr u8[PYR_N] push_node,
+       	  		 reg u8 push_nodeheight)
+-> reg ptr u8[BDS_ST_SIZE]
+{
+    reg u8 size;
+    reg ptr u8[BDS_ST_NDE_SIZE] nodes;
+    reg u64 offset;
+
+    /* Get size */
+    size = BDS_st_get_size(stack_);
+
+    /* Copy push_node into stack */
+    nodes = stack_[BDS_ST_NDE:BDS_ST_NDE_SIZE];
+    offset = (64u)size;
+    offset *= PYR_N;
+    nodes = BDS_st_set_N(nodes, push_node, offset);
+    stack_[BDS_ST_NDE:BDS_ST_NDE_SIZE] = nodes;
+
+    /* Set node height. */
+    offset = (64u)size;
+    stack_ = BDS_st_set_height(stack_, push_nodeheight, offset);
+
+    /* Increment stack size. */
+    size += 1;
+    stack_ = BDS_st_set_size(stack_, size);
+
+    return stack_;
+}
+
+/* 
+   Authentication path GET/SET
+*/
+
+/* Copy the ith node in authentication path of state into node. */
+inline fn BDS_get_auth_node(reg ptr u8[PYR_N] node, reg ptr u8[BDS_SIZE] state, reg u64 i)
+-> reg ptr u8[PYR_N]
+{
+    reg u64 offset j;
+    offset = BDS_AUTH;
+    j = i;
+    j *= PYR_N;
+    offset += j;
+    node = BDS_cpy_N(node, state, offset);
+
+    return node;
+}
+
+/* Overwrite the ith node in authentication path of state. */
+inline fn BDS_set_auth_node(reg ptr u8[BDS_SIZE] state, reg ptr u8[PYR_N] node, reg u64 i)
+-> reg ptr u8[BDS_SIZE]
+{
+    reg u64 offset j;
+    offset = BDS_AUTH;
+    j = i;
+    j *= PYR_N;
+    offset += j;
+    state = BDS_set_N(state, node, offset);
+
+    return state;
+}
+
+/* 
+   Keep GET/SET
+*/
+
+/* Copy the ith keep node in state to node. */
+inline fn BDS_get_keep(reg ptr u8[PYR_N] node, reg ptr u8[BDS_SIZE] state, reg u64 i)
+-> reg ptr u8[PYR_N]
+{
+    reg u64 offset j;
+    
+    offset = BDS_KEEP;
+    j = i;
+    j *= PYR_N;
+    offset += j;
+    node = BDS_cpy_N(node, state, offset);
+    
+    return node;
+}
+
+/* (Unused) Copy the ith keep node in state to node. */
+inline fn BDS_set_keep(reg ptr u8[BDS_SIZE] state, reg ptr u8[PYR_N] node, reg u64 i)
+-> reg ptr u8[BDS_SIZE]
+{
+    reg u64 offset j;
+    
+    offset = BDS_KEEP;
+    j = i;
+    j *= PYR_N;
+    offset += j;
+    state = BDS_set_N(state, node, offset);
+    
+    return state;
+}
+
+/* 
+   Initialization.
+*/
+
+/* Initialize the stack of a BDS state. */
+inline fn BDS_init_stack(reg ptr u8[BDS_ST_SIZE] stack_)
+-> reg ptr u8[BDS_ST_SIZE]
+{
+    inline int i offset;
+    reg u8 size;
+
+    size = 0;
+    stack_ = BDS_st_set_size(stack_, size);
+
+    offset = BDS_ST_NDE;
+    for i = 0 to BDS_ST_NDE_SIZE {
+    	stack_[offset + i] = 0;
+    }
+
+    offset = BDS_ST_HGT;
+    for i = 0 to BDS_ST_HGT_SIZE {
+    	stack_[offset + i] = 0;
+    }
+
+    return stack_;
+}
+
+/* Initialize the keep of a BDS state. */
+inline fn BDS_init_keep(reg ptr u8[BDS_KEEP_SIZE] keep)
+-> reg ptr u8[BDS_KEEP_SIZE]
+{
+    inline int i;
+    reg u8 size;
+
+    for i = 0 to BDS_KEEP_SIZE {
+    	keep[i] = 0;
+    }
+    
+    return keep;
+}

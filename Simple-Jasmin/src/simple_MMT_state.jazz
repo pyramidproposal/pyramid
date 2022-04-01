@@ -1,0 +1,413 @@
+require "pyramid_params.jahh"
+require "simple_MMT_state.jahh"
+require "simple_MMT_state_format.jahh"
+
+export fn MMT_th_get_fin_jazz(reg u64 statep, reg u64 index)
+-> reg u8
+{
+	inline int i;
+
+	reg u8 a fin;
+
+	stack u8[MMT_SIZE] state;
+	
+	for i = 0 to MMT_SIZE {
+		a = (u8)[statep + i];
+		state[i] = a;
+	}
+	
+	fin = MMT_th_get_fin(state, index);
+
+	return fin;
+}
+
+export fn MMT_th_get_idx_jazz(reg u64 statep, reg u64 index)
+-> reg u64
+{
+	inline int i;
+
+	reg u8 a;
+
+	reg u64 idx;
+
+	stack u8[MMT_SIZE] state;
+	
+	for i = 0 to MMT_SIZE {
+		a = (u8)[statep + i];
+		state[i] = a;
+	}
+	
+	idx = MMT_th_get_idx(state, index);
+
+	return idx;
+}
+
+export fn MMT_th_get_sda_jazz(reg u64 sdap, reg u64 statep, reg u64 index)
+{
+	inline int i;
+
+	reg u8 a;
+
+	stack u8[MMT_SIZE] state;
+	
+	stack u8[PYR_N] sda;
+
+	stack u64 s_sdap;
+
+	for i = 0 to MMT_SIZE {
+		a = (u8)[statep + i];
+		state[i] = a;
+	}
+	
+	s_sdap = sdap;
+
+	sda = MMT_th_get_sda(sda, state, index);
+
+	sdap = s_sdap;
+
+	for i = 0 to PYR_N {
+		a = sda[i];
+		(u8) [sdap + i] = a;
+	}
+}
+
+export fn MMT_th_set_fin_0_jazz(reg u64 statep, reg u64 index)
+{
+	inline int i;
+
+	reg u8 a;
+
+	stack u8[MMT_SIZE] state;
+
+	stack u64 s_statep;
+	
+	for i = 0 to MMT_SIZE {
+		a = (u8)[statep + i];
+		state[i] = a;
+	}
+
+	s_statep = statep;
+	
+	state = MMT_th_set_fin(state, 0, index);
+
+	statep = s_statep;
+
+	for i = 0 to MMT_SIZE {
+		a = state[i];
+		(u8) [statep + i] = a;
+	}
+}
+
+export fn MMT_th_set_fin_1_jazz(reg u64 statep, reg u64 index)
+{
+	inline int i;
+
+	reg u8 a;
+
+	stack u8[MMT_SIZE] state;
+
+	stack u64 s_statep;
+	
+	for i = 0 to MMT_SIZE {
+		a = (u8)[statep + i];
+		state[i] = a;
+	}
+
+	s_statep = statep;
+	
+	state = MMT_th_set_fin(state, 1, index);
+
+	statep = s_statep;
+
+	for i = 0 to MMT_SIZE {
+		a = state[i];
+		(u8) [statep + i] = a;
+	}
+}
+
+export fn MMT_th_set_idx_jazz(reg u64 statep, reg u64 idx, reg u64 index)
+{
+	inline int i;
+
+	reg u8 a;
+
+	stack u8[MMT_SIZE] state;
+
+	stack u64 s_statep;
+	
+	for i = 0 to MMT_SIZE {
+		a = (u8)[statep + i];
+		state[i] = a;
+	}
+
+	s_statep = statep;
+	
+	state = MMT_th_set_idx(state, idx, index);
+
+	statep = s_statep;
+
+	for i = 0 to MMT_SIZE {
+		a = state[i];
+		(u8) [statep + i] = a;
+	}
+}
+
+
+export fn MMT_th_set_sda_jazz(reg u64 statep, reg u64 nodep, reg u64 index)
+{
+	inline int i;
+
+	reg u8 a;
+
+	stack u8[MMT_SIZE] state;
+
+	stack u8[PYR_N] node;
+
+	stack u64 s_statep;
+	
+	for i = 0 to MMT_SIZE {
+		a = (u8)[statep + i];
+		state[i] = a;
+	}
+
+	for i = 0 to PYR_N {
+		a = (u8)[nodep + i];
+		node[i] = a;
+	}
+
+	s_statep = statep;
+	
+	state = MMT_th_set_sda(state, node, index);
+
+	statep = s_statep;
+
+	for i = 0 to MMT_SIZE {
+		a = state[i];
+		(u8) [statep + i] = a;
+	}
+}
+
+export fn MMT_st_get_size_jazz(reg u64 stack_p)
+-> reg u8
+{
+	inline int i;
+
+	reg u8 a size;
+
+	stack u8[MMT_ST_SIZE] stack_;
+	
+	for i = 0 to MMT_ST_SIZE {
+		a = (u8)[stack_p + i];
+		stack_[i] = a;
+	}
+	
+	size = MMT_st_get_size(stack_);
+
+	return size;
+}
+
+export fn MMT_st_get_height_jazz(reg u64 stack_p, reg u64 index)
+-> reg u8
+{
+	inline int i;
+
+	reg u8 a height;
+
+	stack u8[MMT_ST_SIZE] stack_;
+	
+	for i = 0 to MMT_ST_SIZE {
+		a = (u8)[stack_p + i];
+		stack_[i] = a;
+	}
+	
+	height = MMT_st_get_height(stack_, index);
+
+	return height;
+}
+
+export fn MMT_st_set_size_jazz(reg u64 stack_p, reg u8 size)
+{
+	inline int i;
+
+	reg u8 a;
+
+	stack u8[MMT_ST_SIZE] stack_;
+
+	stack u64 s_stack_p;
+	
+	for i = 0 to MMT_ST_SIZE {
+		a = (u8)[stack_p + i];
+		stack_[i] = a;
+	}
+
+	s_stack_p = stack_p;
+	
+	stack_ = MMT_st_set_size(stack_, size);
+
+	stack_p = s_stack_p;
+
+	for i = 0 to MMT_ST_SIZE {
+		a = stack_[i];
+		(u8) [stack_p + i] = a;
+	}
+}
+
+export fn MMT_st_set_height_jazz(reg u64 stack_p, reg u8 height, reg u64 index)
+{
+	inline int i;
+
+	reg u8 a;
+
+	stack u8[MMT_ST_SIZE] stack_;
+
+	stack u64 s_stack_p;
+	
+	for i = 0 to MMT_ST_SIZE {
+		a = (u8)[stack_p + i];
+		stack_[i] = a;
+	}
+
+	s_stack_p = stack_p;
+	
+	stack_ = MMT_st_set_height(stack_, height, index);
+
+	stack_p = s_stack_p;
+
+	for i = 0 to MMT_ST_SIZE {
+		a = stack_[i];
+		(u8) [stack_p + i] = a;
+	}
+}
+
+export fn MMT_stack_pop_jazz(reg u64 pop_nodep, reg u64 stack_p)
+{
+	inline int i;
+
+	reg u8 a;
+
+	stack u8[MMT_ST_SIZE] stack_;
+	
+	stack u8[PYR_N] pop_node;
+
+	stack u64 s_pop_nodep s_stack_p;
+
+	for i = 0 to MMT_ST_SIZE {
+		a = (u8)[stack_p + i];
+		stack_[i] = a;
+	}
+	
+	s_pop_nodep = pop_nodep;
+	s_stack_p = stack_p;
+
+	pop_node, stack_ = MMT_stack_pop(pop_node, stack_);
+
+	pop_nodep = s_pop_nodep;
+	stack_p = s_stack_p;
+
+	for i = 0 to PYR_N {
+		a = pop_node[i];
+		(u8) [pop_nodep + i] = a;
+	}
+
+	for i = 0 to MMT_ST_SIZE {
+		a = stack_[i];
+		(u8) [stack_p + i] = a;
+	}
+}
+
+export fn MMT_stack_push_jazz(reg u64 stack_p, reg u64 push_nodep, reg u8 push_nodeheight)
+{
+	inline int i;
+
+	reg u8 a;
+
+	stack u8[MMT_ST_SIZE] stack_;
+	
+	stack u8[PYR_N] push_node;
+
+	stack u64 s_push_nodep s_stack_p;
+
+	for i = 0 to MMT_ST_SIZE {
+		a = (u8)[stack_p + i];
+		stack_[i] = a;
+	}
+
+	for i = 0 to PYR_N {
+		a = (u8)[push_nodep + i];
+		push_node[i] = a;
+	}
+	
+	s_stack_p = stack_p;
+
+	stack_ = MMT_stack_push(stack_, push_node, push_nodeheight);
+
+	stack_p = s_stack_p;
+
+	for i = 0 to MMT_ST_SIZE {
+		a = stack_[i];
+		(u8) [stack_p + i] = a;
+	}
+}
+
+export fn MMT_get_auth_node_jazz(reg u64 nodep, reg u64 statep, reg u64 index)
+{
+	inline int i;
+
+	reg u8 a;
+
+	stack u8[MMT_SIZE] state;
+	
+	stack u8[PYR_N] node;
+
+	stack u64 s_nodep;
+
+	for i = 0 to MMT_SIZE {
+		a = (u8)[statep + i];
+		state[i] = a;
+	}
+	
+	s_nodep = nodep;
+
+	node = MMT_get_auth_node(node, state, index);
+
+	nodep = s_nodep;
+
+	for i = 0 to PYR_N {
+		a = node[i];
+		(u8) [nodep + i] = a;
+	}
+}
+
+export fn MMT_set_auth_node_jazz(reg u64 statep, reg u64 nodep, reg u64 index)
+{
+	inline int i;
+
+	reg u8 a;
+
+	stack u8[MMT_SIZE] state;
+
+	stack u8[PYR_N] node;
+
+	stack u64 s_statep;
+	
+	for i = 0 to MMT_SIZE {
+		a = (u8)[statep + i];
+		state[i] = a;
+	}
+
+	for i = 0 to PYR_N {
+		a = (u8)[nodep + i];
+		node[i] = a;
+	}
+
+	s_statep = statep;
+	
+	state = MMT_set_auth_node(state, node, index);
+
+	statep = s_statep;
+
+	for i = 0 to MMT_SIZE {
+		a = state[i];
+		(u8) [statep + i] = a;
+	}
+}

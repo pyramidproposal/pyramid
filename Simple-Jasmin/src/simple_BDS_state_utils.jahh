@@ -1,0 +1,100 @@
+require "pyramid_params.jahh"
+require "simple_BDS_state_format.jahh"
+
+/* Basic utility functions on/for a BDS state (reg ptr u8[BDS_SIZE]). */
+
+inline fn BDS_cpy_N(reg ptr u8[PYR_N] out, reg ptr u8[BDS_SIZE] in, reg u64 offset)
+-> reg ptr u8[PYR_N]
+{
+    inline int i;
+    reg u8 a;
+
+    for i = 0 to PYR_N {
+    	a = in[i + (int) offset];
+    	out[i] = a;
+    }
+    return out;
+}
+
+inline fn BDS_set_N(reg ptr u8[BDS_SIZE] out, reg ptr u8[PYR_N] in, reg u64 offset)
+-> reg ptr u8[BDS_SIZE]
+{
+    inline int i;
+    reg u8 a;
+
+    for i = 0 to PYR_N {
+    	a = in[i];
+    	out[i + (int) offset] = a;
+    }
+    return out;
+}
+
+
+inline fn BDS_st_get_N(reg ptr u8[PYR_N] out, reg ptr u8[BDS_ST_NDE_SIZE] in, reg u64 offset)
+-> reg ptr u8[PYR_N]
+{
+    inline int i;
+    reg u8 a;
+
+    for i = 0 to PYR_N {
+    	a = in[i + (int) offset];
+    	out[i] = a;
+    }
+    return out;
+}
+
+inline fn BDS_st_set_N(reg ptr u8[BDS_ST_NDE_SIZE] out, reg ptr u8[PYR_N] in, reg u64 offset)
+-> reg ptr u8[BDS_ST_NDE_SIZE]
+{
+    inline int i;
+    reg u8 a;
+
+    for i = 0 to PYR_N {
+    	a = in[i];
+    	out[i + (int) offset] = a;
+    }
+    return out;
+}
+
+inline fn BDS_st_clr_N(reg ptr u8[BDS_ST_NDE_SIZE] in, reg u64 offset)
+-> reg ptr u8[BDS_ST_NDE_SIZE]
+{
+    inline int i;
+    
+    for i = 0 to PYR_N {
+    	in[i + (int) offset] = 0;
+    }
+    return in;
+}
+
+inline fn BDS_btou64_idx(reg ptr u8[BDS_SIZE] in, reg u64 offset)
+-> reg u64
+{
+    inline int i;
+    reg u64 a64 b64;
+    
+    a64 = 0;
+    for i = 0 to PYR_IDX_BYTES {
+    	    a64 <<= 8;
+	    b64 = (64u)in[i + (int) offset];
+	    a64 |= b64;
+    }
+    return a64;
+}
+
+
+inline fn BDS_u64tob_idx(reg ptr u8[BDS_SIZE] out, reg u64 a64, reg u64 offset)
+-> reg ptr u8[BDS_SIZE]
+{
+    inline int i;
+    reg u64 b64;
+    reg u8 b8;
+
+    b64 = a64;
+    for i = PYR_IDX_BYTES - 1 downto -1 {
+    	    b8 = (8u)b64;
+	    out[i + (int) offset] = b8;
+	    b64 >>= 8;
+    }
+    return out;
+}

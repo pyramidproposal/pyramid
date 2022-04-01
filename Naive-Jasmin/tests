@@ -1,0 +1,21 @@
+#!/bin/bash
+
+if test -f 'test/bin/test_sanity_check'; then
+    echo 'test/bin/test_sanity_check'
+    ./test/bin/test_sanity_check
+fi
+
+for i in `find test/bin/ -executable -name "test_fips202_*"`; do
+    echo "$i"
+    ./$i
+done
+
+for i in `find test/bin/ -executable -name "test_xmss_*"`; do
+    echo "$i"
+    ./$i
+done
+
+for i in `find test/bin/ -executable -name "test_crypto_*"`; do
+    echo "$i"
+    ./$i
+done

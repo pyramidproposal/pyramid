@@ -1,0 +1,323 @@
+require "pyramid_params.jahh"
+require "pyr_thash_shake256.jahh"
+require "pyr_hash_shake256.jahh"
+
+/* Expands inseed using the simplified PRF construction into PYR_WOTS_LEN seeds (outseeds). */
+#[returnaddress="stack"]
+fn expand_seed(reg ptr u8[PYR_WOTS_PK_BYTES] outseeds, reg ptr u8[PYR_N] inseed,
+               reg ptr u8[PYR_N] pub_seed, reg ptr u32[8] addr)
+-> reg ptr u8[PYR_WOTS_PK_BYTES]
+{
+    inline int i j;
+    stack u32[8] addr_;
+
+    stack ptr u8[PYR_N] s_inseed;
+    stack ptr u8[PYR_N] s_pub_seed;
+
+    addr_ = init_addr(addr_);
+    addr_ = copy_keypair_addr(addr_, addr);
+    addr_ = set_type(addr_, PYR_ADDR_TYPE_PRFKG);
+
+    s_inseed = inseed;
+    s_pub_seed = pub_seed;
+    for i = 0 to PYR_WOTS_LEN {
+	addr_ = set_chain_addr_(addr_, i);
+
+	inseed = s_inseed;
+	pub_seed = s_pub_seed;
+	outseeds[i*PYR_N:PYR_N] = prf(outseeds[i*PYR_N:PYR_N], inseed, pub_seed, addr_);
+    }
+
+    return outseeds;
+}
+
+/* Computes the chaining function on inout. */
+/* in/out from the C implementation are merged for clarity. */
+#[returnaddress="stack"]
+fn gen_chain(reg ptr u8[PYR_N] inout, reg u32 start, reg u32 steps,
+             reg ptr u8[PYR_N] pub_seed, reg ptr u32[8] addr)
+-> reg ptr u8[PYR_N], reg ptr u32[8]
+{
+    inline int i;
+    reg u32 j n;
+
+    stack u32 s_j s_n;
+    stack ptr u8[PYR_N] s_pub_seed;
+    stack ptr u32[8] s_addr;
+
+    s_pub_seed = pub_seed;
+    s_addr = addr;
+
+    /* j = start; j < (start + steps) && j < PYR_WOTS_W */
+    j = start;
+    n = start;
+    n += steps;
+    if(n > PYR_WOTS_W){
+        n = PYR_WOTS_W;
+    }
+    s_n = n;    
+    while(j < n){
+    	s_j = j;
+	
+	addr = s_addr;
+        addr = set_hash_addr(addr, j);
+	s_addr = addr;
+	
+    	pub_seed = s_pub_seed;
+	inout = thash1(inout, pub_seed, addr);
+	
+	j = s_j;
+	n = s_n;
+	j += 1;
+    }
+
+    addr = s_addr;
+
+    return inout, addr;
+}
+
+/* Interprets a message of PYR_N bytes as integers base w. */
+inline fn base_w_m(reg ptr u32[PYR_WOTS_LEN1] output, reg ptr u8[PYR_N] input)
+-> reg ptr u32[PYR_WOTS_LEN1]
+{
+    reg u8 total;
+    reg u32 bits consumed tmp;    
+    reg u64 in out;
+
+    /* total = 0 was not be required, after *some* Jasmin update it is:
+       one-varmap checker: modified expression */
+    total = 0;
+
+    in = 0;
+    out = 0;
+    bits = 0;
+    consumed = 0;
+    while(consumed < PYR_WOTS_LEN1){
+        if(bits == 0){
+	    total = input[u8 (int) in];
+	    in += 1;
+	    bits += 8;
+	}
+	bits -= PYR_WOTS_LOGW;
+	tmp = (32u)total;
+	tmp >>= bits;
+	tmp &= PYR_WOTS_W - 1;
+	output[u32 (int) out] = tmp;
+	out += 1;
+        consumed += 1;
+    }
+    return output;
+}
+
+/* Interprets a message of CSUM_BYTES bytes as integers base w. */
+inline fn base_w_c(reg ptr u32[PYR_WOTS_LEN2] output, reg ptr u8[CSUM_BYTES] input)
+-> reg ptr u32[PYR_WOTS_LEN2]
+{
+    reg u8 total;
+    reg u32 bits consumed tmp;
+    reg u64 in out;
+
+    /* total = 0 *should* not be required, after Jasmin update it is:
+       one-varmap checker: modified expression */
+    total = 0;
+
+    in = 0;
+    out = 0;
+    bits = 0;
+    consumed = 0;
+    while(consumed < PYR_WOTS_LEN2){
+        if(bits == 0){
+	    total = input[u8 (int) in];
+	    in += 1;
+	    bits += 8;
+	}
+	bits -= PYR_WOTS_LOGW;
+	tmp = (32u)total;
+	tmp >>= bits;
+	tmp &= PYR_WOTS_W - 1;
+	output[u32 (int) out] = tmp;
+	out += 1;
+        consumed += 1;
+    }
+    return output;
+}
+
+/* Computes the WOTS+ checksum over a message (in base_w). */
+inline fn wots_checksum(reg ptr u32[PYR_WOTS_LEN2] csum_base_w,
+                        reg ptr u32[PYR_WOTS_LEN1] msg_base_w)
+-> reg ptr u32[PYR_WOTS_LEN2]
+{
+    inline int i;
+    reg u8 t8;
+    reg u32 csum;
+    stack u8[CSUM_BYTES] csum_bytes;
+
+    csum = 0;
+    for i = 0 to PYR_WOTS_LEN1 {
+        csum += PYR_WOTS_W - 1;
+	csum -= msg_base_w[i];
+    }
+    csum <<= (8 - (PYR_WOTS_LEN2 * PYR_WOTS_LOGW % 8)) % 8;
+    for i = CSUM_BYTES-1 downto -1 {
+        t8 = (8u)csum;
+        csum_bytes[i] = t8;
+	csum >>= 8;
+    }
+    csum_base_w = base_w_c(csum_base_w, csum_bytes);
+    
+    return csum_base_w;
+}
+
+/* Takes a message and derives the matching chain lengths. */
+#[returnaddress="stack"]
+fn chain_lengths(reg ptr u32[PYR_WOTS_LEN] lengths, reg ptr u8[PYR_N] msg)
+-> reg ptr u32[PYR_WOTS_LEN]
+{
+    lengths[0:PYR_WOTS_LEN1] = base_w_m(lengths[0:PYR_WOTS_LEN1], msg);
+    lengths[PYR_WOTS_LEN1:PYR_WOTS_LEN2] = wots_checksum(lengths[PYR_WOTS_LEN1:PYR_WOTS_LEN2],
+                                                         lengths[0:PYR_WOTS_LEN1]);
+    return lengths;
+}
+
+/* Generates a WOTS pk by expanding seed and advancing each chain w - 1 steps. */
+#[returnaddress="stack"]
+fn wots_pkgen(reg ptr u8[PYR_WOTS_PK_BYTES] pk, reg ptr u8[PYR_N] seed,
+                     reg ptr u8[PYR_N] pub_seed, reg ptr u32[8] addr)
+-> reg ptr u8[PYR_WOTS_PK_BYTES], reg ptr u32[8]
+{
+    inline int i;
+    reg u32 start steps;
+
+    stack ptr u8[PYR_N] s_pub_seed;
+    stack ptr u32[8] s_addr;
+
+    s_pub_seed = pub_seed;
+    s_addr = addr;
+    
+    pk = expand_seed(pk, seed, pub_seed, addr);
+    
+    addr = s_addr;
+    
+    for i = 0 to PYR_WOTS_LEN {
+    	start = 0; 
+    	steps = PYR_WOTS_W - 1;
+        addr = set_chain_addr_(addr, i);
+	
+	pub_seed = s_pub_seed;
+	
+	pk[i*PYR_N:PYR_N], addr = gen_chain(pk[i*PYR_N:PYR_N], start, steps, pub_seed, addr);
+    }
+
+    return pk, addr;
+}
+
+/* Generates a WOTS sig by expanding seed and advancing each chain 
+   a variable number of times, conform the message msg. */
+#[returnaddress="stack"]
+fn wots_sign(reg ptr u8[PYR_WOTS_BYTES] sig, reg ptr u8[PYR_N] msg,
+                    reg ptr u8[PYR_N] seed, reg ptr u8[PYR_N] pub_seed, reg ptr u32[8] addr)
+-> reg ptr u8[PYR_WOTS_BYTES], reg ptr u32[8]
+{
+    inline int i;
+    reg u32 start steps len;
+    stack u32[PYR_WOTS_LEN] lengths;
+
+    stack ptr u8[PYR_N] s_pub_seed;
+    stack ptr u32[8] s_addr;
+
+    s_pub_seed = pub_seed;
+    s_addr = addr;
+    
+    lengths = chain_lengths(lengths, msg);
+    sig = expand_seed(sig, seed, pub_seed, addr);
+    
+    addr = s_addr;
+
+    for i = 0 to PYR_WOTS_LEN {
+        len = lengths[i];
+    	start = 0;
+	steps = len;
+	addr = set_chain_addr_(addr, i);
+
+ 	pub_seed = s_pub_seed;
+	
+ 	sig[i*PYR_N:PYR_N], addr = gen_chain(sig[i*PYR_N:PYR_N], start, steps, pub_seed, addr);
+    }
+
+    return sig, addr;
+}
+
+/* Generates a WOTS pk by advancing each chain, from the WOTS sig onwards, 
+   a variable number of times, conform the message msg. */
+#[returnaddress="stack"]
+fn wots_pk_from_sig(reg ptr u8[PYR_WOTS_PK_BYTES] pk, reg ptr u8[PYR_WOTS_BYTES] sig,
+                           reg ptr u8[PYR_N] msg, reg ptr u8[PYR_N] pub_seed, reg ptr u32[8] addr)
+-> reg ptr u8[PYR_WOTS_PK_BYTES], reg ptr u32[8]
+{
+    inline int i j;
+    reg u8 a;
+    reg u32 start steps len;
+    stack u32[PYR_WOTS_LEN] lengths;
+
+    stack ptr u8[PYR_N] s_pub_seed;
+    stack ptr u32[8] s_addr;
+
+    s_pub_seed = pub_seed;
+    s_addr = addr;
+
+    lengths = chain_lengths(lengths, msg);
+
+    addr = s_addr;    
+
+    /* This copy happens in gen_chain in C. */
+    for i = 0 to PYR_WOTS_LEN {
+    	pk[i*PYR_N:PYR_N] = cpy_N(pk[i*PYR_N:PYR_N], sig[i*PYR_N:PYR_N]);
+    }
+
+    for i = 0 to PYR_WOTS_LEN {
+    	len = lengths[i];
+	start = len;
+	steps = PYR_WOTS_W - 1;
+	steps -= len;
+	
+    	addr = set_chain_addr_(addr, i);
+
+  	pub_seed = s_pub_seed;
+	
+	pk[i*PYR_N:PYR_N], addr = gen_chain(pk[i*PYR_N:PYR_N], start, steps, pub_seed, addr);
+    }
+    
+    return pk, addr;
+}
+
+/* First computes a WOTS public key from sk_seed, then compresses it to obtain a leaf node.*/
+/* Not inlined: thashLEN is used in two locations. */
+#[returnaddress="stack"]
+fn gen_leaf_wots(reg ptr u8[PYR_N] leaf, reg ptr u8[PYR_N] sk_seed,
+                            reg ptr u8[PYR_N] pub_seed,
+			    reg ptr u32[8] wotspk_addr, reg ptr u32[8] ots_addr)
+-> reg ptr u8[PYR_N], reg ptr u32[8]
+{
+    stack u8[PYR_WOTS_PK_BYTES] pk;
+
+    stack ptr u8[PYR_N] s_leaf s_pub_seed;
+    stack ptr u32[8] s_ots_addr s_wotspk_addr;
+
+    s_leaf = leaf;
+    s_pub_seed = pub_seed;
+    s_wotspk_addr = wotspk_addr;
+    
+    pk, ots_addr = wots_pkgen(pk, sk_seed, pub_seed, ots_addr);
+    
+    leaf = s_leaf;
+    pub_seed = s_pub_seed;
+    wotspk_addr = s_wotspk_addr;
+    
+    s_ots_addr = ots_addr;
+    
+    leaf = thashLEN(leaf, pk, pub_seed, wotspk_addr);
+    
+    ots_addr = s_ots_addr;
+    
+    return leaf, ots_addr;
+}

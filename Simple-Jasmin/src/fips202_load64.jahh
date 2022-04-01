@@ -1,0 +1,17 @@
+inline fn load64(reg ptr u8[8] x) -> reg u64
+{
+	inline int i;
+
+	reg u64 r;
+	reg u64 t;
+
+	r = (64u) x[0];
+	
+	for i = 1 to 8 {
+		t = (64u) x[i];
+		t <<= (8 * i);
+		r |= t;
+	}
+
+	return r;
+}

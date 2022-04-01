@@ -1,0 +1,29 @@
+require "pyramid_params.jahh"
+require "pyr_wots.jahh"
+require "pyr_address.jahh"
+require "utils.jahh"
+
+/* 
+    Given leaf index i, generate XMSS signature from state.
+*/
+inline fn tree_sig(stack u8[PYR_XMSS_BYTES] sig, stack u8[PYR_N] M, stack u8[PYR_N] sk_ssd,
+                   stack u8[PYR_N] sk_psd, reg u32 idx_leaf, stack u32[8] subtree_addr,
+	           stack u8[AUTH_BYTES] auth_path)
+-> stack u8[PYR_XMSS_BYTES]
+{
+    stack u32 [8] wots_addr;
+
+    wots_addr = init_addr(wots_addr);
+    wots_addr = copy_subtree_addr(wots_addr, subtree_addr);
+    wots_addr = set_type(wots_addr, PYR_ADDR_TYPE_WOTS);
+
+    /* Generate WOTS signature. */
+    wots_addr = set_keypair_addr(wots_addr, idx_leaf);
+    sig[0:PYR_WOTS_BYTES], wots_addr = wots_sign(sig[0:PYR_WOTS_BYTES], M, sk_ssd,
+                                                 sk_psd, wots_addr);
+
+    /* Copy the authentication path into the signature. */
+    sig[PYR_WOTS_BYTES:AUTH_BYTES] = cpy_AUTH(sig[PYR_WOTS_BYTES:AUTH_BYTES], auth_path);
+    
+    return sig;
+}

@@ -1,0 +1,14 @@
+require "pyramid_params.jahh"
+require "utils.jahh"
+
+inline fn keccak_inc_finalize_256(reg ptr u64[26] s_inc)
+-> reg ptr u64[26]
+{
+    reg u64 nr_abs;
+
+    nr_abs = s_inc[25];
+    s_inc[u8 (int) nr_abs] ^= 0x1F;
+    s_inc[u8 SHAKE256_RATE-1] ^= 128;
+    s_inc[25] = 0;
+    return s_inc;
+}

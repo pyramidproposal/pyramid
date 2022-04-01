@@ -1,0 +1,124 @@
+require "pyramid_params.jahh"
+require "pyr_address.jahh"
+require "utils.jahh"
+require "pyr_hash_shake256.jahh"
+require "simple_treehash.jahh"
+require "simple_BDS_state.jahh"
+require "simple_BDS_state_format.jahh"
+require "simple_fwd_ref.jahh"
+
+/* Generate a BDS state from the core of a Pyramid secret key. */
+inline fn BDS_stategen(stack u8[BDS_SIZE] state, stack u8[PYR_SK_CORE_BYTES] sk)
+-> reg ptr u8[BDS_SIZE]
+{
+    inline int i offset;
+    stack u32 [8] addr;
+    stack u8[2*PYR_N] current; /* th_h_in */
+    stack u8[PYR_N] next_ref;
+    reg u32 s t;
+
+    /* Explicitly; already zero after init_addr. */
+    addr = init_addr(addr);
+    addr = set_layer_addr_(addr, 0);
+    addr = set_tree_addr_(addr, 0);    
+    addr = set_type(addr, PYR_ADDR_TYPE_HASHTREE);
+    addr = set_keypair_addr_(addr, 0);
+
+    /* Forward the FSG reference once. From here, we will denote the FSG reference position
+       after every call that forwards it. The position should correspond to the values for
+       (s, t) arguments that are used by Treehash. */
+    next_ref = fsg_1(next_ref, sk[SK_SSD:PYR_N], sk[SK_PSD:PYR_N], addr);
+    /* FSG position: 1. */
+
+    /* Initialize auth[0] */
+    offset = BDS_AUTH;
+    s = 1; /* Offset: 1 */
+    t = 0; /* Height: 0 */
+    state[offset:PYR_N], next_ref = treehash_comp(state[offset:PYR_N], next_ref,
+                                                  sk[SK_PSD:PYR_N], s, t, addr);
+    /* FSG position: 2. */
+    addr = set_tree_index_(addr, 1);
+    for i = 0 to PYR_TREE_HEIGHT - 1 {
+        /* FSG position loop start: 2^(i + 1). */
+
+	/* Prepare the left node that combines into auth[i+1] */
+        s = 2 * (1 << i);
+	t = i;
+        current[0:PYR_N], next_ref = treehash_comp(current[0:PYR_N], next_ref, sk[SK_PSD:PYR_N],
+	                                            s, t, addr);
+	/* FSG position: 3 * 2^i (the fixed offset of "next" BDS references). */
+
+	/* Copy the FSG reference to the Treehash instance at layer i. */
+        offset = BDS_TREE + BDS_TH_SDN + i * PYR_N;
+	state[offset:PYR_N] = cpy_N(state[offset:PYR_N], next_ref);
+
+	/* Initialize node[i] */
+	offset = BDS_TREE + BDS_TH_NDE + i * PYR_N;
+	s = 3 * (1 << i);
+	t = i;
+	state[offset:PYR_N], next_ref = treehash_comp(state[offset:PYR_N], next_ref,
+	                                               sk[SK_PSD:PYR_N], s, t, addr);
+	/* FSG position: 2^(i + 2). */
+        current[PYR_N:PYR_N] = cpy_N(current[PYR_N:PYR_N], state[offset:PYR_N]);
+
+	/* Initialize auth[i+1] */
+	offset = BDS_AUTH + (i + 1) * PYR_N;
+	addr = set_tree_height_(addr, i);
+	state[offset:PYR_N] = thash2(state[offset:PYR_N], current, sk[SK_PSD:PYR_N], addr);
+    }
+    /* FSG position: 2^PYR_TREE_HEIGHT, i.e. the first reference of the next tree. */
+
+    /* We currently only support non-"FAST_KEYGEN"
+       (this is a toggle provided by Simple in the C reference code). */
+
+    /* Initialize all Treehash instances as "finished", i.e. fin = 1. */
+    for i = 0 to PYR_TREE_HEIGHT {
+        offset = BDS_TREE + BDS_TH_FIN + i;
+	state[offset] = 1;
+	
+	offset = BDS_TREE + BDS_TH_IDX + i * PYR_IDX_BYTES;
+	state[offset:PYR_IDX_BYTES] = zero_IDX(state[offset:PYR_IDX_BYTES]);
+    }
+
+    /* The Treehash instances are inactive; initialize their active reference to 0. */
+    for i = 0 to PYR_TREE_HEIGHT {
+        offset = BDS_TREE + BDS_TH_SDA + i * PYR_N;
+	state[offset:PYR_N] = zero_N(state[offset:PYR_N]);
+    }
+
+    /* Initialize the stack/keep to 0. */
+    offset = BDS_STCK;
+    state[offset:BDS_ST_SIZE] = BDS_init_stack(state[offset:BDS_ST_SIZE]);
+
+    offset = BDS_KEEP;
+    state[offset:BDS_KEEP_SIZE] = BDS_init_keep(state[offset:BDS_KEEP_SIZE]);
+
+    /* Non-"FAST_KEYGEN". If d > 1, then the Treehash instance on tree height (h/d) - 1
+       is active, and starts in the middle of the "next" tree. */
+    if(PYR_D > 1){
+        /* Forward the FSG reference to the middle of the next tree.  */
+        addr = set_tree_addr_(addr, 1);
+	addr = set_keypair_addr_(addr, 0);
+	next_ref = fwd_ref(next_ref, sk[SK_PSD:PYR_N], (1 << (PYR_TREE_HEIGHT - 1)), addr);
+	/* FSG position: 3 * 2^(PYR_TREE_HEIGHT - 1). */
+
+	/* The rest of the loop is analogous to the one fow lower Treehash instances. */
+	offset = BDS_TREE + BDS_TH_SDN + (PYR_TREE_HEIGHT - 1) * PYR_N;
+	state[offset:PYR_N] = cpy_N(state[offset:PYR_N], next_ref);
+    
+        offset = BDS_TREE + BDS_TH_NDE + (PYR_TREE_HEIGHT - 1) * PYR_N;
+	s = (1 << (PYR_TREE_HEIGHT - 1));
+	t = PYR_TREE_HEIGHT - 1;
+	state[offset:PYR_N], next_ref = treehash_comp(state[offset:PYR_N], next_ref,
+	                                               sk[SK_PSD:PYR_N], s, t, addr);
+	/* FSG position: 2^(PYR_TREE_HEIGHT + 1); the final position. */
+    } else {
+        /* Treehash intance (h/d) - 1 will never be active. */
+        offset = BDS_TREE + BDS_TH_SDN + (PYR_TREE_HEIGHT - 1) * PYR_N;
+	state[offset:PYR_N] = zero_N(state[offset:PYR_N]);
+	offset = BDS_TREE + BDS_TH_NDE + (PYR_TREE_HEIGHT - 1) * PYR_N;
+	state[offset:PYR_N] = zero_N(state[offset:PYR_N]);
+    }
+
+    return state;
+}

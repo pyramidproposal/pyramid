@@ -1,0 +1,43 @@
+require "pyramid_params.jahh"
+
+/* MMT Treehash instance */
+/* Size */
+param int MMT_TH_FIN_SIZE = PYR_TREE_HEIGHT * 1;
+param int MMT_TH_IDX_SIZE = PYR_TREE_HEIGHT * PYR_IDX_BYTES;
+param int MMT_TH_SDA_SIZE = PYR_TREE_HEIGHT * PYR_N;
+/* Offset */
+param int MMT_TH_FIN  = 0;
+param int MMT_TH_IDX  = MMT_TH_FIN + MMT_TH_FIN_SIZE;
+param int MMT_TH_SDA  = MMT_TH_IDX + MMT_TH_IDX_SIZE;
+param int MMT_TH_SIZE = MMT_TH_SDA + MMT_TH_SDA_SIZE;
+
+
+/* MMT Stack */
+/* Size */
+/* Note: other code will implicily use 1 byte for HGT/SZE. */
+param int MMT_ST_SZE_SIZE = 1;
+param int MMT_ST_NDE_SIZE = PYR_TREE_HEIGHT * PYR_N;
+param int MMT_ST_HGT_SIZE = PYR_TREE_HEIGHT;
+/* Offset */
+param int MMT_ST_SZE  = 0;
+param int MMT_ST_NDE  = MMT_ST_SZE + MMT_ST_SZE_SIZE;
+param int MMT_ST_HGT  = MMT_ST_NDE + MMT_ST_NDE_SIZE;
+param int MMT_ST_SIZE = MMT_ST_HGT + MMT_ST_HGT_SIZE;
+
+
+/* MMT State */
+/* Size */
+param int MMT_AUTH_SIZE = AUTH_BYTES;
+param int MMT_STCK_SIZE = MMT_ST_SIZE;
+param int MMT_TREE_SIZE = MMT_TH_SIZE;
+/* Offset */
+param int MMT_AUTH = 0;
+param int MMT_STCK = MMT_AUTH + MMT_AUTH_SIZE;
+param int MMT_TREE = MMT_STCK + MMT_STCK_SIZE;
+param int MMT_SIZE = MMT_TREE + MMT_TREE_SIZE;
+
+/* 
+  Note: sizes such as AUTH_BYTES are still preferred over MMT_AUTH_SIZE, 
+  as this size is not 'MMT-specific'. The above is merely used to make the 
+  format clear (using these interchangeably can also lead to warnings).
+*/

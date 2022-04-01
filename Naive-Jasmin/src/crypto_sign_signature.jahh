@@ -1,0 +1,167 @@
+require "pyramid_params.jahh"
+require "pyr_address.jahh"
+require "pyr_treehash.jahh"
+require "pyr_wots.jahh"
+require "utils.jahh"
+
+/* Predicate: is idx the last valid index? */
+inline fn last_idxp(reg u64 idx) -> reg bool
+{
+    inline int last_idx;
+    reg bool res;
+    
+    if((PYR_FULL_HEIGHT % 8) == 0){
+        last_idx = ((1 << PYR_FULL_HEIGHT) - 2);
+    } else {
+        last_idx = ((1 << PYR_FULL_HEIGHT) - 1);
+    }
+    res = (idx == last_idx);
+    
+    return res;
+}
+
+/* Predicate: is idx an invalid index? */
+inline fn invalid_idxp(reg u64 idx) -> reg bool
+{
+    inline int invalid_idx;
+    reg bool res;
+    
+    if((PYR_FULL_HEIGHT % 8) == 0) {
+        invalid_idx = ((1 << PYR_FULL_HEIGHT) - 1);
+	res = (idx >= invalid_idx);
+    } else {
+        invalid_idx = ((1 << PYR_FULL_HEIGHT) - 1);
+	res = (idx > invalid_idx);
+    }
+    return res;
+}
+
+/* Overwrite the secret key with zeroes. Set the index to -1.  */
+inline fn delete_sk(reg ptr u8[PYR_SK_BYTES] sk) -> reg ptr u8[PYR_SK_BYTES]
+{
+    inline int i;
+    for i = 0 to PYR_IDX_BYTES {
+        sk[SK_IDX + i] = 0xff;
+    }
+    sk[SK_SSD:PYR_N] = zero_N(sk[SK_SSD:PYR_N]);
+    sk[SK_PRF:PYR_N] = zero_N(sk[SK_PRF:PYR_N]);
+    sk[SK_PRT:PYR_N] = zero_N(sk[SK_PRT:PYR_N]);
+    sk[SK_PSD:PYR_N] = zero_N(sk[SK_PSD:PYR_N]);
+
+    return sk;
+}
+
+/*
+ * Computes a detached signature sig of length siglen, 
+ * for a message m of length mlen. 
+ * Secret key sk is used to sign, and is updated afterwards.
+ */
+inline fn crypto_sign_signature(stack u8[PYR_BYTES] sig, stack u64[1] siglen, reg u64 m,
+                                reg u64 mlen, stack u8[PYR_SK_BYTES] sk)
+-> reg u32, stack u8[PYR_BYTES], reg ptr u64[1], stack u8[PYR_SK_BYTES]
+{
+    inline int i sig_offset;
+    reg bool status;
+    reg u32 idx_leaf res;
+    reg u64 idx idx_tree;
+    
+    stack u8[PYR_N] root;
+    stack u32[8] hmsg_addr wots_addr;
+
+    stack u64 s_m s_mlen s_idx s_idx_tree;
+    stack u32 s_idx_leaf;
+    
+    sig_offset = 0;
+    idx = btou64_idx(sk[SK_IDX:PYR_IDX_BYTES]);
+
+    /* Spill registers in preparation for upcoming hash operations. */
+    /* These are all RO in the for loop, except for idx_tree. */
+    s_m = m;
+    s_mlen = mlen;
+    s_idx = idx;
+    s_idx_tree = idx;
+
+    /* The signature length is 0 bytes, until we have completely finished it. */
+    siglen[0] = 0;
+
+    /* Proceed with the signature only if the index in sk is valid. */
+    status = invalid_idxp(idx);
+    if(status){
+	res = -2;
+    } else {
+	/* Initialize the WOTS address conform expectations of wots_sign and treehash.  */
+    	wots_addr = init_addr(wots_addr);
+        wots_addr = set_type(wots_addr, PYR_ADDR_TYPE_WOTS);
+
+	/* Copy the valid sk index to sig. */
+	sig[SIG_IDX:PYR_IDX_BYTES] = cpy_IDX(sig[SIG_IDX:PYR_IDX_BYTES],
+	                                     sk[SK_IDX:PYR_IDX_BYTES]);
+	sig_offset += PYR_IDX_BYTES;
+
+	/* Interweave d WOTS signatures with d authentication paths, 
+           i.e. one for every hypertree layer. */
+	for i = 0 to PYR_D {
+	    /* Compute the tree index and the leaf index on hypertree layer i. */
+	    idx_tree = s_idx_tree;
+	    idx_leaf = idx_tree;
+	    idx_leaf &= (1 << PYR_TREE_HEIGHT)-1;
+            idx_tree >>= PYR_TREE_HEIGHT;
+	    s_idx_tree = idx_tree;
+	    s_idx_leaf = idx_leaf;
+
+	    /* Prepare the WOTS address for layer i. */
+	    wots_addr = set_layer_addr_(wots_addr, i);
+	    wots_addr = set_tree_addr(wots_addr, idx_tree);
+	    wots_addr = set_keypair_addr(wots_addr, idx_leaf);
+
+	    /* On hypertree layer 0, WOTS signs a message digest. */
+	    if(i == 0){
+	        /* Compute the digest randomization value. */
+		hmsg_addr = init_addr(hmsg_addr);
+		hmsg_addr = copy_keypair_addr(hmsg_addr, wots_addr);
+		hmsg_addr = set_type(hmsg_addr, PYR_ADDR_TYPE_PRF);
+	        sig[SIG_RND:PYR_N] = prf(sig[SIG_RND:PYR_N], sk[SK_PRF:PYR_N],
+		                         sk[SK_PSD:PYR_N], hmsg_addr);
+		sig_offset += PYR_N;
+
+		/* Compute the randomized message digest. Note the type change.*/
+		m = s_m;
+		mlen = s_mlen;
+		hmsg_addr = set_type(hmsg_addr, PYR_ADDR_TYPE_HMSG);
+		root = h_msg(root, sig[SIG_RND:PYR_N], sk[SK_PRT:PYR_N],
+		             hmsg_addr, m, mlen);
+	    }
+
+	    /* Generate a WOTS signature for "root" on layer i. */
+	    sig[sig_offset:PYR_WOTS_BYTES], wots_addr =
+	        wots_sign(sig[sig_offset:PYR_WOTS_BYTES], root,
+	                  sk[SK_SSD:PYR_N], sk[SK_PSD:PYR_N], wots_addr);
+	    sig_offset += PYR_WOTS_BYTES;
+
+	    /* Compute the authentication path and root on layer i. */
+    	    idx_leaf = s_idx_leaf;
+	    root, sig[sig_offset:AUTH_BYTES] =
+	        treehash(root, sig[sig_offset:AUTH_BYTES], sk[SK_SSD:PYR_N],
+	                 sk[SK_PSD:PYR_N], idx_leaf, wots_addr);
+	    sig_offset += AUTH_BYTES;
+	}
+
+	/* If idx is the last valid index, delete the secret key. Otherwise, increment idx. */
+	/* res reflects the state of the sk that is returned.*/
+	idx = s_idx;
+	status = last_idxp(idx);
+	if(status){
+	    sk = delete_sk(sk);
+	    res = -1;
+	} else {
+	    idx += 1;
+	    sk[SK_IDX:PYR_IDX_BYTES] = u64tob_idx(sk[SK_IDX:PYR_IDX_BYTES], idx);
+	    res = 0;
+	}
+
+	/* Regardless of sk being deleted, we did create a valid signature. */
+	siglen[0] = PYR_BYTES;
+    }
+    
+    return res, sig, siglen, sk;
+}

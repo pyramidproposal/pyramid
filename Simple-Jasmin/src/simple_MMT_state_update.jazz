@@ -1,0 +1,36 @@
+require "pyramid_params.jahh"
+require "simple_MMT_state_update.jahh"
+
+export fn MMT_state_update_jazz(reg u64 statep, reg u64 skp, reg u32 layer)
+{
+	inline int i;
+
+	reg u8 a;
+
+	stack u8[MMT_SIZE] state;
+	
+	stack u8[PYR_SK_CORE_BYTES] sk;
+
+	stack u64 s_statep;
+
+	for i = 0 to MMT_SIZE {
+		a = (u8)[statep + i];
+		state[i] = a;
+	}
+
+	for i = 0 to PYR_SK_CORE_BYTES {
+		a = (u8)[skp + i];
+		sk[i] = a;
+	}
+	
+	s_statep = statep;
+
+	state = MMT_state_update(state, sk, layer);
+
+	statep = s_statep;
+
+	for i = 0 to MMT_SIZE {
+		a = state[i];
+		(u8) [statep + i] = a;
+	}
+}

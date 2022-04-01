@@ -1,0 +1,112 @@
+param int PYR_N             = 16;
+param int PYR_FULL_HEIGHT   = 20;
+param int PYR_D             = 10;
+param int PYR_WOTS_W        = 16;
+
+param int PYR_ADDR_BYTES    = 32; /* Explicit. */
+param int PYR_IDX_BYTES     = (PYR_FULL_HEIGHT + 7) / 8;
+
+param int PYR_WOTS_LOGW     = 4;
+
+param int PYR_WOTS_LEN1     = 8 * PYR_N / PYR_WOTS_LOGW;
+param int PYR_WOTS_LEN2     = 3;
+
+param int PYR_WOTS_LEN      = PYR_WOTS_LEN1 + PYR_WOTS_LEN2;
+param int PYR_WOTS_BYTES    = PYR_WOTS_LEN * PYR_N;
+param int PYR_WOTS_PK_BYTES = PYR_WOTS_BYTES;
+
+param int PYR_TREE_HEIGHT   = PYR_FULL_HEIGHT / PYR_D;
+
+/* Additional */
+/* Hash instantiations input length. */
+param int PRF_INLEN        = (2*PYR_N + 32);
+param int HPRG_INLEN       = (2*PYR_N + 32);
+param int HMSG_CONST_INLEN = (2*PYR_N + 32);
+
+/* thash simple & robust */
+param int TH_INLEN     = PYR_N + 32;
+param int TH1_INLEN    = TH_INLEN + PYR_N;
+param int TH2_INLEN    = TH_INLEN + 2*PYR_N;
+param int THLEN_INLEN  = TH_INLEN + PYR_WOTS_BYTES;
+
+/* thash robust */
+param int MASK_INLEN = TH_INLEN;
+
+/* Address */
+param int PYR_ADDR_TYPE_WOTS     = 0;
+param int PYR_ADDR_TYPE_WOTSPK   = 1;
+param int PYR_ADDR_TYPE_HASHTREE = 2;
+
+param int PYR_ADDR_TYPE_HMSG     = 3;
+param int PYR_ADDR_TYPE_PRF      = 4;
+param int PYR_ADDR_TYPE_PRFKG    = 5;
+param int PYR_ADDR_TYPE_FSG      = 6;
+
+/* Shake256 rate. */
+param int SHAKE128_RATE = 168;
+param int SHAKE256_RATE = 136;
+param int SHA3_256_RATE = 136;
+param int SHA3_512_RATE = 72;
+
+/* Shake256 offsets. */
+param int PYR_OFFSET_LAYER      = 3;
+param int PYR_OFFSET_TREE       = 8;
+param int PYR_OFFSET_TYPE       = 19;
+param int PYR_OFFSET_KP_ADDR2   = 22;
+param int PYR_OFFSET_KP_ADDR1   = 23;
+param int PYR_OFFSET_CHAIN_ADDR = 27;
+param int PYR_OFFSET_HASH_ADDR  = 31;
+param int PYR_OFFSET_TREE_HGT   = 27;
+param int PYR_OFFSET_TREE_INDEX = 28;
+
+/* WOTS */
+param int CSUM_BYTES = (PYR_WOTS_LEN2 * PYR_WOTS_LOGW + 7) / 8;
+param int CTR_BYTES  = (PYR_WOTS_LEN + 255) / 256;
+
+/* Authentication path */
+param int AUTH_BYTES = PYR_TREE_HEIGHT * PYR_N;
+
+/* 
+  The FORWARD_SECURE toggle that is provided in C is not (yet) included; 
+  the implementation is forward-secure by default.
+*/
+
+/* Public key offsets. */
+param int PK_RT = 0;
+param int PK_SD = PK_RT + PYR_N;
+
+/* Secret key offsets. */
+param int SK_IDX = 0;
+param int SK_SSD = SK_IDX + PYR_IDX_BYTES;
+param int SK_PRF = SK_SSD + PYR_N * PYR_D; /* Forward-secure */
+param int SK_PRT = SK_PRF + PYR_N + PK_RT;
+param int SK_PSD = SK_PRT + PK_SD;
+
+/* Signature offsets. */
+param int SIG_IDX = 0;
+param int SIG_RND = SIG_IDX + PYR_IDX_BYTES;
+param int SIG_HTS = SIG_RND + PYR_N;
+
+/* XMSS HTS size. */
+param int PYR_XMSS_BYTES    = PYR_WOTS_BYTES + AUTH_BYTES;
+
+/* Circumvent circular dependencies. */
+param int BDS_BYTES =  ( (PYR_TREE_HEIGHT * PYR_N)
+                       + 1 + ( (PYR_TREE_HEIGHT - 1) * (PYR_N + 1) )
+		       + ( PYR_TREE_HEIGHT * (PYR_N + 1 + PYR_IDX_BYTES + 2*PYR_N) )
+		       + ( (PYR_TREE_HEIGHT/2) * PYR_N) );
+
+param int MMT_BYTES =  ((PYR_TREE_HEIGHT * PYR_N)
+		       + 1 + ( PYR_TREE_HEIGHT * (PYR_N + 1) )
+		       + ( PYR_TREE_HEIGHT * (1 + PYR_IDX_BYTES + PYR_N)));
+
+
+/* Resulting signature sizes. */
+param int PYR_SK_CORE_BYTES  = SK_PSD + PYR_N;
+param int XMSSMT_STATE_BYTES = BDS_BYTES + (PYR_D - 1) * MMT_BYTES;
+param int PYR_SK_BYTES       = PYR_SK_CORE_BYTES + XMSSMT_STATE_BYTES;
+param int PYR_BYTES          = SIG_HTS + PYR_D * PYR_XMSS_BYTES;
+param int PYR_PK_BYTES       = PK_SD + PYR_N;
+
+/* Keypair required randomness. */
+param int CRYPTO_SEEDBYTES = (2 + PYR_D) * PYR_N;

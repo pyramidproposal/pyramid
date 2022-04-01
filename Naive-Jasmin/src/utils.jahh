@@ -1,0 +1,171 @@
+/* 
+    Utility functions for various files in the implementation. 
+    Currently these are all unrolled by default, this should change in later versions.
+*/
+
+/* Equality predicate for two n-byte values.  */
+
+inline fn eq_N(reg ptr u8[PYR_N] a, reg ptr u8[PYR_N] b)
+-> reg bool
+{
+    inline int i;
+    reg u8 a8 b8;
+    reg u8 eq;
+    reg bool res;
+
+    eq = 0;
+    for i = 0 to PYR_N {
+    	a8 = a[i];
+    	b8 = b[i];
+	a8 ^= b8;
+	eq |= a8;
+    }
+    res = (eq == 0);
+    return res;
+}
+
+/* Copy the n-byte value from in to out. */
+
+inline fn cpy_N(reg ptr u8[PYR_N] out, reg ptr u8[PYR_N] in)
+-> reg ptr u8[PYR_N]
+{
+    inline int i;
+    reg u8 a;
+    
+    for i = 0 to PYR_N {
+    	a = in[i];
+    	out[i] = a;
+    }
+    return out;
+}
+
+/* Compound XOR for two n-byte values. */
+
+inline fn xor_N(reg ptr u8[PYR_N] inout, reg ptr u8[PYR_N] in)
+-> reg ptr u8[PYR_N]
+{
+    inline int i;
+    reg u8 a;
+
+    for i = 0 to PYR_N {
+    	a = in[i];
+    	inout[i] ^= a;
+    }
+    return inout;
+}
+
+/* Clear an n-byte buffer, e.g. for deletion of sk. */
+
+inline fn zero_N(reg ptr u8[PYR_N] out)
+-> reg ptr u8[PYR_N]
+{
+    inline int i;
+    
+    for i = 0 to PYR_N {
+    	out[i] = 0;
+    }
+    return out;
+}
+
+/* Copy the index, e.g. from sk to sig. */
+
+inline fn cpy_IDX(reg ptr u8[PYR_IDX_BYTES] out, reg ptr u8[PYR_IDX_BYTES] in)
+-> reg ptr u8[PYR_IDX_BYTES]
+{
+    inline int i;
+    reg u8 a;
+    
+    for i = 0 to PYR_IDX_BYTES {
+    	a = in[i];
+    	out[i] = a;
+    }
+    return out;
+}
+
+/* Store an address in a 32-byte buffer for hashing. */
+
+inline fn addr_to_bytes(reg ptr u8[32] out, reg ptr u32[8] in)
+-> reg ptr u8[32]
+{
+    inline int i;
+    reg u8 a;
+    
+    for i = 0 to 32 {
+    	a = in[u8 i];
+    	out[i] = a;
+    }
+    return out;
+}
+
+/* Big endian load/store for the index. */
+
+inline fn btou64_idx(reg ptr u8[PYR_IDX_BYTES] in)
+-> reg u64
+{
+    inline int i;
+    reg u64 a64 b64;
+    
+    a64 = 0;
+    for i = 0 to PYR_IDX_BYTES {
+    	    a64 <<= 8;
+	    b64 = (64u)in[i];
+	    a64 |= b64;
+    }
+    return a64;
+}
+
+inline fn u64tob_idx(reg ptr u8[PYR_IDX_BYTES] out, reg u64 a64)
+-> reg ptr u8[PYR_IDX_BYTES]
+{
+    inline int i;
+    reg u64 b64;
+    reg u8 b8;
+
+    b64 = a64;
+    for i = PYR_IDX_BYTES - 1 downto -1 {
+    	    b8 = (8u)b64;
+	    out[i] = b8;
+	    b64 >>= 8;
+    }
+    return out;
+}
+
+/* Utility spill/load functions for incremental FIPS202 functions. */
+
+inline fn spill_2(reg u64 a b)
+-> stack u64, stack u64
+{
+  stack u64 sa sb;
+  sa = a;
+  sb = b;
+  return sa, sb;
+}
+
+inline fn load_2(stack u64 sa sb)
+-> reg u64, reg u64
+{
+  reg u64 a b;
+  a = sa;
+  b = sb;
+  return a, b;
+}
+
+inline fn spill_3(reg u64 a b c)
+-> stack u64, stack u64, stack u64
+{
+  stack u64 sa sb sc;
+  sa = a;
+  sb = b;
+  sc = c;
+  return sa, sb, sc;
+}
+
+inline fn load_3(stack u64 sa sb sc)
+-> reg u64, reg u64, reg u64
+{
+  reg u64 a b c;
+  a = sa;
+  b = sb;
+  c = sc;
+  return a, b, c;
+}

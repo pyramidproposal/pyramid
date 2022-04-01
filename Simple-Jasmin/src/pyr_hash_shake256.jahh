@@ -1,0 +1,211 @@
+require "pyramid_params.jahh"
+require "pyr_address.jahh"
+require "fips202_shake256_PYR_N_PRF_INLEN.jahh"
+require "fips202_shake256_PYR_N_HPRG_INLEN.jahh"
+require "fips202_keccak_inc_init.jahh"
+require "fips202_keccak_inc_absorb_256_HMSG_CONST_INLEN.jahh"
+require "fips202_keccak_inc_absorb_256.jahh"
+require "fips202_keccak_inc_finalize_256.jahh"
+require "fips202_keccak_inc_squeeze_256_PYR_N.jahh"
+require "utils.jahh"
+
+/* One MUST ensure that 4 | PYR_N currently, see fsg. */
+param int ADDR_POS = PYR_N;
+
+/* 
+    One PRF instantiation that includes pub_seed.
+    This simplification is also made by the C implementation.
+*/
+#[returnaddress="stack"] 
+fn prf(reg ptr u8[PYR_N] out, reg ptr u8[PYR_N] key,
+       reg ptr u8[PYR_N] pub_seed, reg ptr u32[8] addr)
+-> reg ptr u8[PYR_N]
+{
+    inline int offset;
+    stack u8[PRF_INLEN] buf;
+
+    offset = 0;
+    buf[offset:PYR_N] = cpy_N(buf[offset:PYR_N], key);
+    offset += PYR_N;
+    buf[offset:32] = addr_to_bytes(buf[offset:32], addr);
+    offset += 32;
+    buf[offset:PYR_N] = cpy_N(buf[offset:PYR_N], pub_seed);
+    offset += PYR_N;
+    
+    out = shake256_PYR_N_PRF_INLEN(out, buf);
+    
+    return out;
+}
+
+/* 
+    Absorbs a constant buffer, followed by a variable length message. 
+    To achieve specific typing for the constant buffer, 
+    the absorb is split into two parts. The constant part must ensure that it sets s_inc[25].
+*/
+#[returnaddress="stack"]
+fn h_msg(reg ptr u8[PYR_N] out, reg ptr u8[PYR_N] R, reg ptr u8[PYR_N] root,
+       	  	reg ptr u32[8] addr, reg u64 m, reg u64 mlen)
+-> reg ptr u8[PYR_N]
+{
+    inline int offset;
+    stack u64[26] s_inc;
+    stack u8[HMSG_CONST_INLEN] buf;
+    
+    stack ptr u8[PYR_N] s_out;
+    stack u64 s_m s_mlen;
+
+    offset = 0;
+    buf[offset:PYR_N] = cpy_N(buf[offset:PYR_N], R);
+    offset += PYR_N;
+    buf[offset:32] = addr_to_bytes(buf[offset:32], addr);
+    offset += 32;
+    buf[offset:PYR_N] = cpy_N(buf[offset:PYR_N], root);
+    offset += PYR_N;
+
+    s_out = out;
+    s_m = m;
+    s_mlen = mlen;
+
+    s_inc = keccak_inc_init(s_inc);
+    s_inc = keccak_inc_absorb_256_HMSG_CONST_INLEN(s_inc, buf);
+    
+    m = s_m;
+    mlen = s_mlen;
+    
+    s_inc = keccak_inc_absorb_256(s_inc, m, mlen);
+    s_inc = keccak_inc_finalize_256(s_inc);
+    
+    out = s_out;
+    
+    out, s_inc[0:25] = keccak_inc_squeeze_256_PYR_N(out, s_inc[0:25]);
+
+    return out;
+}
+
+/* Helper function for setting up the FSG buffer. */
+inline fn fsg_fill(reg ptr u8[HPRG_INLEN] buf, reg ptr u8[PYR_N] in,
+                        reg ptr u8[PYR_N] pk, reg ptr u32[8] addr)
+-> (reg ptr u8[HPRG_INLEN])
+{
+    inline int i offset;
+    reg u8 a;
+
+    offset = 0;
+    buf[offset:PYR_N] = cpy_N(buf[offset:PYR_N], in);
+    offset += PYR_N;
+
+    /* Please note that this operation is dangerous if 4 !| n. */
+    buf[u32 ADDR_POS/4:8] = init_addr(buf[u32 ADDR_POS/4:8]);
+    buf[u32 ADDR_POS/4:8] = copy_keypair_addr(buf[u32 ADDR_POS/4:8], addr);
+    buf[u32 ADDR_POS/4:8] = set_type(buf[u32 ADDR_POS/4:8], PYR_ADDR_TYPE_FSG);
+    offset += 32;
+
+    buf[offset:PYR_N] = cpy_N(buf[offset:PYR_N], pk);
+    offset += PYR_N;
+
+    return buf;
+}
+
+/* Regular FSG, computing both a WOTS Seed and an FSG Reference from the previous reference. */
+#[returnaddress="stack"]
+fn fsg(reg ptr u8[PYR_N] out, reg ptr u8[PYR_N] next_ref,
+       reg ptr u8[PYR_N] in, reg ptr u8[PYR_N] pk, reg ptr u32[8] addr)
+-> (reg ptr u8[PYR_N], reg ptr u8[PYR_N])
+{
+    stack u8[HPRG_INLEN] buf;
+
+    stack ptr u8[PYR_N] s_out;
+    stack ptr u8[PYR_N] s_next_ref;
+
+    buf = fsg_fill(buf, in, pk, addr);
+
+    /* Please note that this operation is dangerous if 4 !| n. */
+    buf[u32 ADDR_POS/4:8] = set_direction_(buf[u32 ADDR_POS/4:8], 0);
+    
+    s_next_ref = next_ref;
+    out = shake256_PYR_N_HPRG_INLEN(out, buf);
+    next_ref = s_next_ref;
+    
+    /* Please note that this operation is dangerous if 4 !| n. */
+    buf[u32 ADDR_POS/4:8] = set_direction_(buf[u32 ADDR_POS/4:8], 1);
+    
+    s_out = out;
+    next_ref = shake256_PYR_N_HPRG_INLEN(next_ref, buf);
+    out = s_out;
+
+    return out, next_ref;
+}
+
+/* Compound FSG, overwriting the FSG reference directly. */
+#[returnaddress="stack"]
+fn fsg_comp(reg ptr u8[PYR_N] out, reg ptr u8[PYR_N] ref,
+            reg ptr u8[PYR_N] pk, reg ptr u32[8] addr)
+-> (reg ptr u8[PYR_N], reg ptr u8[PYR_N])
+{
+    stack u8[HPRG_INLEN] buf;
+
+    stack ptr u8[PYR_N] s_out;
+    stack ptr u8[PYR_N] s_ref;
+
+    buf = fsg_fill(buf, ref, pk, addr);
+    buf[u32 ADDR_POS/4:8] = set_direction_(buf[u32 ADDR_POS/4:8], 0);
+    
+    s_ref = ref;
+    out = shake256_PYR_N_HPRG_INLEN(out, buf);
+    ref = s_ref;
+
+    buf[u32 ADDR_POS/4:8] = set_direction_(buf[u32 ADDR_POS/4:8], 1);
+    
+    s_out = out;
+    ref = shake256_PYR_N_HPRG_INLEN(ref, buf);
+    out = s_out;
+
+    return out, ref;
+}
+
+/* FSG that only computes the WOTS seed, i.e. direction = 0. */
+#[returnaddress="stack"]
+fn fsg_0(reg ptr u8[PYR_N] out, reg ptr u8[PYR_N] in,
+         reg ptr u8[PYR_N] pk, reg ptr u32[8] addr)
+-> reg ptr u8[PYR_N]
+{
+    stack u8[HPRG_INLEN] buf;
+
+    buf = fsg_fill(buf, in, pk, addr);
+    buf[u32 ADDR_POS/4:8] = set_direction_(buf[u32 ADDR_POS/4:8], 0);
+
+    out = shake256_PYR_N_HPRG_INLEN(out, buf);
+
+    return out;
+}
+
+/* FSG that only computes the FSG reference, i.e. direction = 1. */
+#[returnaddress="stack"]
+fn fsg_1(reg ptr u8[PYR_N] next_ref, reg ptr u8[PYR_N] in,
+         reg ptr u8[PYR_N] pk, reg ptr u32[8] addr)
+-> reg ptr u8[PYR_N]
+{
+    stack u8[HPRG_INLEN] buf;
+
+    buf = fsg_fill(buf, in, pk, addr);
+    buf[u32 ADDR_POS/4:8] = set_direction_(buf[u32 ADDR_POS/4:8], 1);
+
+    next_ref = shake256_PYR_N_HPRG_INLEN(next_ref, buf);
+
+    return next_ref;
+}
+
+/* Compound FSG that only computes the FSG reference, i.e. direction = 1. */
+#[returnaddress="stack"]
+fn fsg_1_comp(reg ptr u8[PYR_N] ref, reg ptr u8[PYR_N] pk, reg ptr u32[8] addr)
+-> reg ptr u8[PYR_N]
+{
+    stack u8[HPRG_INLEN] buf;
+
+    buf = fsg_fill(buf, ref, pk, addr);
+    buf[u32 ADDR_POS/4:8] = set_direction_(buf[u32 ADDR_POS/4:8], 1);
+
+    ref = shake256_PYR_N_HPRG_INLEN(ref, buf);
+
+    return ref;
+}

@@ -1,0 +1,12 @@
+#!/bin/bash
+
+make -C ./NFS-Naive/ref clean
+make -C ./FS-StackRestore/ref clean
+make -C ./NFS-Simple/ref clean
+make -C ./FS-Simple/ref clean
+make -C ./Simple-Jasmin clean
+make -C ./Simple-Jasmin/ref clean
+make -C ./Simple-Jasmin/ref2 clean
+make -C ./Naive-Jasmin clean
+make -C ./Naive-Jasmin/ref clean
+make -C ./Naive-Jasmin/ref2 clean

@@ -1,0 +1,79 @@
+require "pyramid_params.jahh"
+require "pyr_address.jahh"
+require "fips202_shake256_PYR_N_PRF_INLEN.jahh"
+require "fips202_keccak_inc_init.jahh"
+require "fips202_keccak_inc_absorb_256_HMSG_CONST_INLEN.jahh"
+require "fips202_keccak_inc_absorb_256.jahh"
+require "fips202_keccak_inc_finalize_256.jahh"
+require "fips202_keccak_inc_squeeze_256_PYR_N.jahh"
+require "utils.jahh"
+
+/* 
+    One PRF instantiation that includes pub_seed.
+    This simplification is also made by the C implementation.
+*/
+#[returnaddress="stack"] 
+fn prf(reg ptr u8[PYR_N] out, reg ptr u8[PYR_N] key,
+       reg ptr u8[PYR_N] pub_seed, reg ptr u32[8] addr)
+-> reg ptr u8[PYR_N]
+{
+    inline int offset;
+    stack u8[PRF_INLEN] buf;
+
+    offset = 0;
+    buf[offset:PYR_N] = cpy_N(buf[offset:PYR_N], key);
+    offset += PYR_N;
+    buf[offset:32] = addr_to_bytes(buf[offset:32], addr);
+    offset += 32;
+    buf[offset:PYR_N] = cpy_N(buf[offset:PYR_N], pub_seed);
+    offset += PYR_N;
+    
+    out = shake256_PYR_N_PRF_INLEN(out, buf);
+    
+    return out;
+}
+
+/* 
+    Absorbs a constant buffer, followed by a variable length message. 
+    To achieve specific typing for the constant buffer, 
+    the absorb is split into two parts. The constant part must ensure that it sets s_inc[25].
+*/
+#[returnaddress="stack"]
+fn h_msg(reg ptr u8[PYR_N] out, reg ptr u8[PYR_N] R, reg ptr u8[PYR_N] root,
+       	  	reg ptr u32[8] addr, reg u64 m, reg u64 mlen)
+-> reg ptr u8[PYR_N]
+{
+    inline int offset;
+    stack u64[26] s_inc;
+    stack u8[HMSG_CONST_INLEN] buf;
+    
+    stack ptr u8[PYR_N] s_out;
+    stack u64 s_m s_mlen;
+
+    offset = 0;
+    buf[offset:PYR_N] = cpy_N(buf[offset:PYR_N], R);
+    offset += PYR_N;
+    buf[offset:32] = addr_to_bytes(buf[offset:32], addr);
+    offset += 32;
+    buf[offset:PYR_N] = cpy_N(buf[offset:PYR_N], root);
+    offset += PYR_N;
+
+    s_out = out;
+    s_m = m;
+    s_mlen = mlen;
+
+    s_inc = keccak_inc_init(s_inc);
+    s_inc = keccak_inc_absorb_256_HMSG_CONST_INLEN(s_inc, buf);
+    
+    m = s_m;
+    mlen = s_mlen;
+    
+    s_inc = keccak_inc_absorb_256(s_inc, m, mlen);
+    s_inc = keccak_inc_finalize_256(s_inc);
+    
+    out = s_out;
+    
+    out, s_inc[0:25] = keccak_inc_squeeze_256_PYR_N(out, s_inc[0:25]);
+
+    return out;
+}

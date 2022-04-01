@@ -1,0 +1,89 @@
+require "pyramid_params.jahh"
+require "fips202_KeccakF1600_StatePermute.jahh"
+require "utils.jahh"
+
+inline fn xor_state(reg ptr u64[26] s_inc, reg u64 m, reg u64 n)
+-> reg ptr u64[26]
+{
+    reg u64 i state_offset;
+    reg u8 a8;
+    
+    state_offset = s_inc[25]; /* Offset by already absorbed bytes. */
+    i = 0; 
+    while(i < n){ /* Check: are there leftover bytes? */
+	a8 = (u8)[m + i];
+	s_inc[u8 (int) state_offset] ^= a8;
+	i += 1;
+	state_offset += 1;
+    }
+    return s_inc;
+}
+
+inline fn absorb_leftover(reg ptr u64[26] s_inc, reg u64 m, reg u64 mlen)
+-> reg ptr u64[26], reg u64, reg u64
+{
+    reg u64 tmp nr_abs;
+    stack u64 s_m, s_mlen;
+    
+    nr_abs = s_inc[25];
+    tmp = nr_abs;
+    if(tmp > 0){ /* Check: Previously unabsorbed? */
+        tmp += mlen;
+	if(tmp >= SHAKE256_RATE){ /* Check: Able to fill rate? */
+	    tmp = SHAKE256_RATE;
+	    tmp -= nr_abs;
+	    
+	     /* Fill from offset to rate. */
+	    s_inc = xor_state(s_inc, m, tmp);
+	    mlen -= tmp;
+	    m += tmp;
+	    s_inc[25] = 0; /* Done absorbing. */
+
+	    s_m, s_mlen = spill_2(m, mlen);
+	    s_inc[0:25] = KeccakF1600_StatePermute(s_inc[0:25]);
+	    m, mlen = load_2(s_m, s_mlen);
+        }
+    }
+    return s_inc, m, mlen;
+}
+
+inline fn absorb_full(reg ptr u64[25] s_inc, reg u64 m, reg u64 mlen)
+-> reg ptr u64[25], reg u64, reg u64
+{
+    inline int i;
+    reg u64 a;
+    stack u64 s_a, s_m, s_mlen;
+    
+    while(mlen >= SHAKE256_RATE){ /* Check: Able to fill rate? */
+        for i = 0 to (SHAKE256_RATE/8) {
+	    a = [m + 8*i];
+	    s_inc[i] ^= a;
+        }
+	mlen -= SHAKE256_RATE;
+	m += SHAKE256_RATE;
+
+	s_a, s_m, s_mlen = spill_3(a, m, mlen); 
+	s_inc = KeccakF1600_StatePermute(s_inc);
+	a, m, mlen = load_3(s_a, s_m, s_mlen);
+    }
+    return s_inc, m, mlen;
+}
+
+inline fn keccak_inc_absorb_256(reg ptr u64[26] s_inc, reg u64 m, reg u64 mlen)
+-> reg ptr u64[26]
+{
+    reg u64 nr_abs;
+
+    /* First round with leftover. */
+    s_inc, m, mlen = absorb_leftover(s_inc, m, mlen);
+    
+    /* Subsequent rounds solely absorb from m. */
+    s_inc[0:25], m, mlen = absorb_full(s_inc[0:25], m, mlen);
+
+    s_inc = xor_state(s_inc, m, mlen);
+
+    nr_abs = s_inc[25];
+    nr_abs += mlen;
+    s_inc[25] = nr_abs;
+    return s_inc;
+}

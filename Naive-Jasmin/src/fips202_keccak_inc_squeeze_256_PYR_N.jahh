@@ -1,0 +1,38 @@
+require "pyramid_params.jahh"
+require "fips202_keccak_squeezeblocks_256_PYR_N.jahh"
+require "fips202_keccak_squeezeblocks_256_256.jahh"
+
+inline fn keccak_inc_squeeze_256_PYR_N(reg ptr u8[PYR_N] output, reg ptr u64[25] s)
+-> reg ptr u8[PYR_N], reg ptr u64[25]
+{
+	inline int i;
+	inline int nblocks;
+	inline int handled;
+	inline int remainder;
+
+	reg u8 t8;
+
+	stack u8[SHAKE256_RATE] t;
+
+	stack ptr u8[PYR_N] s_output;
+
+	nblocks = PYR_N / SHAKE256_RATE;
+	handled = nblocks * SHAKE256_RATE;
+	remainder = PYR_N - handled;
+
+	output, s = keccak_squeezeblocks_256_PYR_N(output, s);
+
+	s_output = output;
+
+	/** No if-statement required, because remainder > 0 always holds in this function **/
+	t, s = keccak_squeezeblocks_256_256(t, s);
+
+	output = s_output;
+
+	for i = 0 to remainder {
+		t8 = t[i];
+		output[handled + i] = t8;
+	}
+
+	return output, s;
+}

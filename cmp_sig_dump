@@ -1,0 +1,51 @@
+#!/bin/bash
+
+# Before running this, ensure that:
+# - common/randombytes.c returns constant output (manual change);
+# - Makefiles are set to compile same hash algo / thash strategy.
+
+# Example randombytes.c:
+
+# #include <fcntl.h>
+# #include <unistd.h>
+
+# // Altered to compare implementations.
+# void randombytes(unsigned char *x, unsigned long long xlen)
+# {
+#   for(unsigned long long i = 0; i < xlen; i++){
+#     x[i] = 0x1f;
+#   }
+# }
+
+
+MFLAGS='PARAMS=pyramid-shake256-test_d_3 THASH=simple'
+
+make -C ./FS-Simple/ref clean
+make $MFLAGS -C ./FS-Simple/ref test/dump_sig
+make -C ./FS-StackRestore/ref clean
+make $MFLAGS -C ./FS-StackRestore/ref test/dump_sig
+diff <(./FS-Simple/ref/test/dump_sig) <(./FS-StackRestore/ref/test/dump_sig)
+
+# 1c1
+# < Dumping signatures for FS-SIMPLE
+# ---
+# > Dumping signatures for FS-STACKRESTORE
+# 1028c1028
+# < Dumped 512 signatures for FS-SIMPLE
+# ---
+# > Dumped 512 signatures for FS-STACKRESTORE
+
+make -C ./NFS-Simple/ref clean
+make $MFLAGS -C ./NFS-Simple/ref test/dump_sig
+make -C ./NFS-Naive/ref clean
+make $MFLAGS -C ./NFS-Naive/ref test/dump_sig
+diff <(./NFS-Simple/ref/test/dump_sig) <(./NFS-Naive/ref/test/dump_sig)
+
+# 1c1
+# < Dumping signatures for NFS-SIMPLE
+# ---
+# > Dumping signatures for NFS-NAIVE
+# 1028c1028
+# < Dumped 512 signatures for NFS-SIMPLE
+# ---
+# > Dumped 512 signatures for NFS-NAIVE

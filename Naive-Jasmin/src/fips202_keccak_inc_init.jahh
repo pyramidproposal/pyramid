@@ -1,0 +1,11 @@
+inline fn keccak_inc_init(reg ptr u64[26] s_inc) -> reg ptr u64[26]
+{
+	inline int i;
+
+	for i = 0 to 25 {
+	  s_inc[i] = 0;
+	}
+	s_inc[25] = 0;
+
+	return s_inc;
+}

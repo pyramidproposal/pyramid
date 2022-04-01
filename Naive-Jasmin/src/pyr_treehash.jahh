@@ -1,0 +1,217 @@
+require "pyramid_params.jahh"
+require "pyr_wots.jahh"
+require "pyr_thash_shake256.jahh"
+require "pyr_address.jahh"
+require "utils.jahh"
+
+/* 
+   Note:
+   This is not the ideal algorithm for Treehash. Ideally, we are able to hash in th_stack, 
+   similar to the C code or Pyramid/XMSS. However, the subarray start index must be typed 
+   "inline int". If trees are small, unrolling the while-loop may be an option
+   to get around this.
+*/
+
+inline fn nto(reg u32 a) -> reg u32
+{
+    inline int i;
+    reg u32 b;
+
+    b = a;
+    b = !b;
+    b -= 1;
+    b &= a; /* Trailing 1's */
+    _, _, _, _, _, b = #POPCNT_32(b);
+
+    return b;
+}
+
+#[returnaddress="stack"]
+fn treehash(reg ptr u8[PYR_N] root, reg ptr u8[AUTH_BYTES] auth_path,
+	     reg const ptr u8[PYR_N] sk_seed, reg const ptr u8[PYR_N] pub_seed, reg u32 leaf_idx,
+	     reg const ptr u32[8] subtree_addr)
+-> reg ptr u8[PYR_N], reg ptr u8[AUTH_BYTES]
+{
+    inline int i;
+    reg u8 a;
+    reg u32 tree_idx j n tmp idx;
+    reg u64 offset;
+    stack u8[(PYR_TREE_HEIGHT+1)*PYR_N] th_stack;
+    stack u8[2*PYR_N] current;
+    stack u32 [8] wots_addr, wotspk_addr, hashtree_addr;
+    
+    stack u32 s_leaf_idx s_idx;
+    stack u32 s_tree_idx s_j s_n;
+    stack u64 s_k;
+
+    stack ptr u8[PYR_N] s_root;
+    stack ptr u8[AUTH_BYTES] s_auth_path;
+    stack ptr u8[PYR_N] s_sk_seed;
+    stack ptr u8[PYR_N] s_pub_seed;
+
+    /* Zero-initialize the addresses. */
+    wots_addr = init_addr(wots_addr);
+    wotspk_addr = init_addr(wotspk_addr);
+    hashtree_addr = init_addr(hashtree_addr);
+
+    /* Copy hypertree layer, tree index. */
+    wots_addr = copy_subtree_addr(wots_addr, subtree_addr);
+    wotspk_addr = copy_subtree_addr(wotspk_addr, subtree_addr);
+    hashtree_addr = copy_subtree_addr(hashtree_addr, subtree_addr);
+
+    /* Set the type fields, conform the type of invocation that _addr is for. */
+    wots_addr = set_type(wots_addr, PYR_ADDR_TYPE_WOTS);
+    wotspk_addr = set_type(wotspk_addr, PYR_ADDR_TYPE_WOTSPK);
+    hashtree_addr = set_type(hashtree_addr, PYR_ADDR_TYPE_HASHTREE);
+
+    /* Spill registers in preparation for upcoming hash operations. */
+    /* Root remains unused in the while loop. */
+    /* The leaf index, secret seed, and public seed are RO. */
+    /* The authentication path is not RO. */
+    s_root = root;    
+    s_leaf_idx = leaf_idx;
+    s_sk_seed = sk_seed;
+    s_pub_seed = pub_seed;
+    s_auth_path = auth_path;
+
+    idx = 0;
+    while(idx < (1 << PYR_TREE_HEIGHT)) {
+        s_idx = idx;
+
+	/* Treehash iterations access the leaves of the tree in succession.  */
+    	wotspk_addr = set_keypair_addr(wotspk_addr, idx);
+	wots_addr = set_keypair_addr(wots_addr, idx);
+
+	/* Unfreeze seeds for gen_leaf_wots (hashing operation). */
+	sk_seed = s_sk_seed;
+	pub_seed = s_pub_seed;
+	
+	/* gen_leaf_wots generates the idx-th leaf node, which is combined afterwards. */
+	current[PYR_N:PYR_N], wots_addr = gen_leaf_wots(current[PYR_N:PYR_N], sk_seed,
+	                                                pub_seed, wotspk_addr, wots_addr);
+
+        /* Check: is the leaf node part of the authentication path for the leaf_idx-th node? */
+	/* (leaf_idx ^ 1) =?= idx */
+	idx = s_idx;
+	tmp = s_leaf_idx;
+	tmp ^= 1;
+	if(tmp == idx){
+	    auth_path = s_auth_path;
+	    auth_path[0:PYR_N] = cpy_N(auth_path[0:PYR_N], current[PYR_N:PYR_N]);
+	    s_auth_path = auth_path;
+	}
+
+	/* nto(idx) is equal to the number of times that we can recuce at the idx-th leaf. */
+	j = 0;
+	n = nto(idx);
+	s_n = n;
+	while(j < n){ /* While a right node is available. */
+	    s_j = j;
+
+	    /* Set hashtree_addr to the address for the node that we create. */
+	    /* tree_idx = (idx >> (j + 1)) */
+	    idx = s_idx;
+	    tree_idx = idx;
+	    tree_idx >>= j;
+	    tree_idx >>= 1;
+	    hashtree_addr = set_tree_height(hashtree_addr, j);
+	    hashtree_addr = set_tree_index(hashtree_addr, tree_idx);
+	    s_tree_idx = tree_idx;
+
+	    /* Prepare offset for a stack operation, to copy the left node to current. */
+	    offset = (64u)j;
+	    offset *= PYR_N;
+	    for i = 0 to PYR_N {
+	    	a = th_stack[i + (int) offset];
+		current[i] = a;
+	    }
+
+	    /* Reduce the nodes, placing the result in the right buffer position (r).*/
+	    pub_seed = s_pub_seed;
+	    current = thash2r(current, pub_seed, hashtree_addr);
+
+	    /* Check: is the node part of the authentication path for the leaf_idx-th node? */
+	    /* ((leaf_idx >> (j+1)) ^ 1) =?= tree_idx */
+	    j = s_j;	    
+	    tmp = s_leaf_idx;
+	    tmp >>= j;
+	    tmp >>= 1;
+	    tmp ^= 1;
+	    tree_idx = s_tree_idx;	    
+	    if(tmp == tree_idx){
+	    	auth_path = s_auth_path;	    
+	        offset = (64u)j;
+		offset += 1;
+	    	offset *= PYR_N;
+	        for i = 0 to PYR_N {
+		    a = current[PYR_N+i];
+		    auth_path[i + (int) offset] = a;
+		}
+       	        s_auth_path = auth_path;
+	    }
+
+       	    n = s_n;
+	    j += 1;
+	} 
+
+	/* The loop ends with a left node or the root of the tree; 
+           the result is pushed onto the stack. */
+	offset = (64u)j;
+	offset *= PYR_N;
+	for i = 0 to PYR_N {
+	    a = current[PYR_N+i];
+	    th_stack[i + (int) offset] = a; 
+	}
+	
+	idx = s_idx;
+	idx += 1;
+    }
+
+    /* Finally, copy the root node from the top of stack into root. */
+    root = s_root;
+    root = cpy_N(root, th_stack[PYR_TREE_HEIGHT*PYR_N:PYR_N]);
+    auth_path = s_auth_path;
+    
+    return root, auth_path;
+}
+
+/* Unused alternative for nto. */
+inline fn nto1(reg u32 a) -> reg u32
+{
+    inline int i;
+    reg u32 b c;
+
+    b = a;
+    b = !b;
+    for i = 0 to 5 {
+    	c = b;
+	c <<= (1 << i);
+    	b |= c;
+    }
+    b = !b;
+    _, _, _, _, _, b = #POPCNT_32(b);
+
+    return b;
+}
+
+/* Unused experimental alternative for nto. */
+inline fn nto2(reg u32 a) -> reg u32
+{
+    reg bool cf;
+    reg u32 b c;
+
+    c = a;
+    _, cf, _, _, _, c = #ADD_32(c, 1);
+    if(cf){
+      b = 32;
+    } else {
+      b = a;
+      b = !b;
+      c &= b;
+      _, _, _, _, _, c = #LZCNT_32(c);
+      b = 31;
+      b -= c;
+    }
+
+    return b;
+}

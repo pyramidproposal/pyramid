@@ -1,0 +1,124 @@
+require "pyramid_params.jahh"
+require "pyr_thash_shake256.jahh"
+require "pyr_address.jahh"
+require "utils.jahh"
+
+inline fn evenp(reg u32 idx)
+-> reg bool
+{
+    reg bool zf;
+    _, _, _, _, zf = #TEST_32(idx, 1);
+    return zf;
+}
+
+/* Setter specifically for the authentication path. */
+inline fn fill_N(reg ptr u8[PYR_N] out, reg ptr u8[AUTH_BYTES] auth_path, reg u32 j)
+-> reg ptr u8[PYR_N]
+{
+    inline int i;
+    reg u8 a;
+    reg u64 offset;
+
+    offset = (64u)j;
+    offset *= PYR_N;
+    for i = 0 to PYR_N {
+    	a = auth_path[i + (int) offset];
+    	out[i] = a;
+    }
+    return out;
+}
+
+/* 
+    Compute a root on height t, 
+    given a leaf at offset s and an authentication path. 
+
+    Because the height t is variable, it is not guaranteed that the full
+    capacity AUTH_BYTES of auth_path is used; this is the case when t = PYR_TREE_HEIGHT.
+*/
+#[returnaddress="stack"]
+fn compute_root(reg ptr u8[PYR_N] root, reg ptr u8[PYR_N] leaf, 
+                reg ptr u8[AUTH_BYTES] auth_path, reg ptr u8[PYR_N] pub_seed,
+		reg u32 s, reg u32 t, reg ptr u32[8] subtree_addr)
+-> reg ptr u8[PYR_N]
+{
+    reg bool even;
+    reg u32 j n offset_cpy;
+    stack u8[2*PYR_N] buffer;
+    stack u32[8] hashtree_addr;
+
+    stack u32 s_j s_n s_offset_cpy;    
+    stack ptr u8[PYR_N] s_root s_pub_seed;
+    stack ptr u8[AUTH_BYTES] s_auth_path;
+
+    /* Spill registers in preparation for upcoming hash operations. */
+    /* The spilled variables are all RO. */
+    s_root = root;
+    s_pub_seed = pub_seed;
+    s_auth_path = auth_path;
+
+    /* Initialize the hashtree address for layer 0.  */
+    hashtree_addr = init_addr(hashtree_addr);
+    hashtree_addr = copy_subtree_addr(hashtree_addr, subtree_addr);
+    hashtree_addr = set_type(hashtree_addr, PYR_ADDR_TYPE_HASHTREE);
+
+    offset_cpy = s;
+
+    /* If the starting offset is even, leaf is a left node. */
+    even = evenp(s);
+    if(even){
+        buffer[0:PYR_N] = cpy_N(buffer[0:PYR_N], leaf);
+	buffer[PYR_N:PYR_N] = cpy_N(buffer[PYR_N:PYR_N], auth_path[0:PYR_N]);
+    } else {
+    	buffer[PYR_N:PYR_N] = cpy_N(buffer[PYR_N:PYR_N], leaf);
+	buffer[0:PYR_N] = cpy_N(buffer[0:PYR_N], auth_path[0:PYR_N]);
+    }  
+
+    j = 0;
+    n = t;
+    n -= 1;
+    s_n = n;
+    while(j < n){
+        s_j = j;
+
+	/* Finalize the address and update the offset copy. */
+        hashtree_addr = set_tree_height(hashtree_addr, j);
+	offset_cpy >>= 1;
+	hashtree_addr = set_tree_index(hashtree_addr, offset_cpy);
+	s_offset_cpy = offset_cpy; 
+
+	/* Combine the nodes and hash into the correct side of the buffer, 
+           in preparation for the next iteration. */
+	even = evenp(offset_cpy);
+	if(even){
+	    pub_seed = s_pub_seed;
+	    buffer = thash2l(buffer, pub_seed, hashtree_addr);
+	    j = s_j;
+	    j += 1;
+	    auth_path = s_auth_path;
+	    buffer[PYR_N:PYR_N] = fill_N(buffer[PYR_N:PYR_N], auth_path, j);
+	} else {
+	    pub_seed = s_pub_seed;
+	    buffer = thash2r(buffer, pub_seed, hashtree_addr);
+	    j = s_j;
+	    j += 1;
+	    auth_path = s_auth_path;
+	    buffer[0:PYR_N] = fill_N(buffer[0:PYR_N], auth_path, j);
+	}
+	
+	n = s_n;
+	offset_cpy = s_offset_cpy;
+	/* j is updated in the conditional. */
+    }
+
+    /* Prepare for the last combination, which produces the root. */
+    root = s_root;
+    pub_seed = s_pub_seed;
+
+    hashtree_addr = set_tree_height(hashtree_addr, j);
+    offset_cpy >>= 1;				   
+    hashtree_addr = set_tree_index(hashtree_addr, offset_cpy);
+
+    root = thash2(root, buffer, pub_seed, hashtree_addr);
+    
+    return root;    
+}

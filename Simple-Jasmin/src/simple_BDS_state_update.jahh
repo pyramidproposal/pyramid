@@ -1,0 +1,262 @@
+require "pyramid_params.jahh"
+require "pyr_address.jahh"
+require "utils.jahh"
+require "format.jahh"
+require "pyr_hash_shake256.jahh"
+require "simple_treehash.jahh"
+require "simple_BDS_state.jahh"
+require "simple_BDS_state_format.jahh"
+require "simple_BDS_update_treehash.jahh"
+
+/* Helper function to improve readability.
+   Move the ith auth node to the (i/2)th n-byte slot of keep. */
+inline fn BDS_move_keep(reg ptr u8[BDS_SIZE] state, reg u32 j)
+-> reg ptr u8[BDS_SIZE]
+{
+    inline int i;
+    reg u8 a8;
+    reg u64 offset_dst offset_src;
+
+    offset_dst = (64u)j;
+    offset_dst >>= 1;
+    offset_dst *= PYR_N;
+    offset_src = (64u)j;
+    offset_src *= PYR_N;
+    for i = 0 to PYR_N {
+    	a8 = state[(BDS_AUTH + i) + (int)offset_src];
+	state[(BDS_KEEP + i) + (int)offset_dst] = a8;
+    }
+    
+    return state;
+}
+
+/* Move the jth node from node to the authentication path. */
+inline fn BDS_move_node(reg ptr u8[BDS_SIZE] state, reg u32 j)
+-> reg ptr u8[BDS_SIZE]
+{
+    inline int i;
+    reg u8 a8;
+    reg u64 offset;    
+
+    offset = (64u)j;
+    offset *= PYR_N;
+    for i = 0 to PYR_N {
+    	a8 = state[(BDS_TREE + BDS_TH_NDE + i) + (int)offset];
+	state[(BDS_AUTH + i) + (int)offset] = a8;
+    }
+    
+    return state;
+}
+
+/* Move the jth node from ref_next to ref_active. */
+inline fn BDS_move_sda(reg ptr u8[BDS_SIZE] state, reg u32 j)
+-> reg ptr u8[BDS_SIZE]
+{
+    inline int i;
+    reg u8 a8;
+    reg u64 offset;    
+
+    offset = (64u)j;
+    offset *= PYR_N;
+    for i = 0 to PYR_N {
+    	a8 = state[(BDS_TREE + BDS_TH_SDN + i) + (int)offset];
+	state[(BDS_TREE + BDS_TH_SDA + i) + (int)offset] = a8;
+    }
+    
+    return state;
+}
+
+/* Clear the jth node in node. */
+inline fn BDS_th_clear_nde(reg ptr u8[BDS_SIZE] state, reg u32 j)
+-> reg ptr u8[BDS_SIZE]
+{
+    inline int i;
+    reg u64 offset k;
+    
+    offset = (64u)j;
+    offset *= PYR_N;
+    for i = 0 to PYR_N {
+    	state[(BDS_TREE + BDS_TH_NDE + i) + (int)offset] = 0;
+    }
+    
+    return state;
+}
+
+inline fn BDS_fwd_refs(stack u8[BDS_SIZE] state, stack u8[PYR_SK_CORE_BYTES] sk,
+                       stack u64 s_idx_sig)
+-> stack u8[BDS_SIZE]
+{
+    inline int i offset;
+    reg bool b;
+    reg u32 th_ref_idx_leaf;
+    reg u64 th_ref_idx th_ref_idx_tree;
+
+    stack u32[8] th_ref_addr;
+
+    /* Note that FSG does not expect a finished type field. */
+    th_ref_addr = init_addr(th_ref_addr);
+
+    for i = 0 to PYR_TREE_HEIGHT {
+    	th_ref_idx = s_idx_sig;
+    	th_ref_idx += 3 * (1 << i);
+
+	b = invalid_idxp(th_ref_idx);
+	if(!b){
+      	    th_ref_idx_tree = th_ref_idx;
+	    th_ref_idx_tree >>= PYR_TREE_HEIGHT;
+      	    th_ref_idx_leaf = th_ref_idx;
+	    th_ref_idx_leaf &= (1 << PYR_TREE_HEIGHT) - 1;
+	    
+      	    th_ref_addr = set_keypair_addr(th_ref_addr, th_ref_idx_leaf);
+      	    th_ref_addr = set_tree_addr(th_ref_addr, th_ref_idx_tree);
+
+	    offset = BDS_TREE + BDS_TH_SDN + i * PYR_N;
+      	    state[offset:PYR_N] = fsg_1_comp(state[offset:PYR_N], sk[SK_PSD:PYR_N],
+	                                          th_ref_addr);
+        }
+    }
+
+    return state;
+}
+
+/* Update the BDS state: 
+   1. Forwards the FSG regerences kept in state;
+   2. Schedules additional Treehash instances, update the authentication path;
+   3. Performs Treehash updates.
+ */
+inline fn BDS_state_update(stack u8[BDS_SIZE] state, stack u8[PYR_SK_CORE_BYTES] sk)
+-> stack u8[BDS_SIZE]
+{
+    inline int i;
+    reg u8 fin;
+    reg u32 i j idx_leaf tau t32 height tree_index t;
+    reg u64 idx_tmp idx_tree idx_sig t64 index;
+    stack u8[PYR_N] node null;
+    stack u8[2 * PYR_N] current;
+    stack u32[8] addr;
+
+    stack u32 s_i s_idx_leaf s_tau;
+    stack u64 s_idx_sig;
+
+    addr = init_addr(addr);
+
+    /* Full index (because layer = 0), tree index, leaf index. */
+    idx_sig = btou64_idx(sk[SK_IDX:PYR_IDX_BYTES]);
+    idx_tree = idx_sig;
+    idx_tree >>= PYR_TREE_HEIGHT;
+    idx_leaf = (32u)idx_sig;
+    idx_leaf &= (1 << PYR_TREE_HEIGHT) - 1;
+    s_idx_leaf = idx_leaf;
+    s_idx_sig = idx_sig;
+
+    addr = set_tree_addr(addr, idx_tree);
+
+    /* Forward the references. */
+    state = BDS_fwd_refs(state, sk, s_idx_sig);
+
+    /* Compute tau, i.e. the height of the first left parent of leaf idx_leaf. */
+    idx_leaf = s_idx_leaf;
+    tau = get_tau(idx_leaf);
+    s_tau = tau;
+
+    /* Preemptively move the two nodes that combine into the next left authentication path node. */
+    if(tau > 0){
+	index = (64u)tau;
+	index -= 1;
+	current[0:PYR_N] = BDS_get_auth_node(current[0:PYR_N], state, index);
+	index >>= 1;	
+	current[PYR_N:PYR_N] = BDS_get_keep(current[PYR_N:PYR_N], state, index);
+    }
+
+    /* Store the left authentication path node that expires in keep.  */
+    /* (idx_leaf >> (tau + 1)) & 1 =?= 0*/
+    t32 = idx_leaf;
+    t32 >>= tau;
+    t32 >>= 1;
+    t32 &= 1;
+    if(t32 == 0){
+        if(tau < PYR_TREE_HEIGHT - 1){
+	    state = BDS_move_keep(state, tau);
+	}
+    }
+    if(tau == 0){ /* The required left authentication path node is on tree layer 0. */
+	t = 0;
+	/* For simplicity, the next reference is put into null (garbage). */
+	/* We omit one optimization here: one could generate auth[0] from the WOTS
+	   signature, for ~1/2 the calls to F. This is also left out in the C implementation. */
+        state[BDS_AUTH:PYR_N], null = treehash(state[BDS_AUTH:PYR_N], null, sk[SK_SSD:PYR_N],
+	                                       sk[SK_PSD:PYR_N], idx_leaf, t, addr);
+    } else {
+        /* Combine nodes from keep, auth that were preemptively stored in current. */
+        if(tau < PYR_TREE_HEIGHT){
+	    height = tau;
+	    height -= 1;
+	    tree_index = idx_leaf;
+	    tree_index >>= tau;
+	    addr = set_type(addr, PYR_ADDR_TYPE_HASHTREE);
+	    addr = set_tree_height(addr, height);
+	    addr = set_tree_index(addr, tree_index);
+	    
+	    node = thash2(node, current, sk[SK_PSD:PYR_N], addr);
+
+	    tau = s_tau;
+	    index = (64u)tau;
+	    state = BDS_set_auth_node(state, node, index);
+	}
+
+	/* Copy the nodes that were schedules previously & schedule new ones. */
+	t64 = 1;
+	j = 0;
+	while(j < tau){
+	    /* Move the node from Treehash instance j to the authentication path. */
+	    state = BDS_move_node(state, j);
+	    state = BDS_th_clear_nde(state, j);
+
+	    /* idx_tmp = ((uint64_t)idx_sig + 1ULL + 3ULL * (1ULL << j)); */
+	    idx_tmp = t64;
+	    idx_tmp *= 3;
+	    idx_tmp += 1;
+	    idx_sig = s_idx_sig;
+	    idx_tmp += idx_sig;
+	    if(idx_tmp < (1 << PYR_FULL_HEIGHT)){
+	        index = (64u)j;
+	        state = BDS_th_set_idx(state, idx_tmp, index);
+		state = BDS_th_set_fin(state, 0, index);
+
+		/* FS: replace the active reference with the next forwarded reference. */
+		state = BDS_move_sda(state, j);
+	    }
+	    t64 <<= 1;
+	    j += 1;
+	}
+    }
+
+    /* Treehash updates; prioritize lowest unfinished treehash instance. */
+    i = 0;
+    while(i < ((PYR_TREE_HEIGHT + 1) >> 1)){
+	s_i = i;    
+
+        j = 0;
+	while { /* j < PYR_TREE_HEIGHT && (state->treehash + j)->fin == 1 */
+	    if(j < PYR_TREE_HEIGHT){
+	        index = (64u)j;
+		fin = BDS_th_get_fin(state, index);
+	    } else {
+		fin = 0; /* short circuit && */
+	    }
+	} (fin == 1) {
+	    j += 1;
+	}
+
+	if(j < PYR_TREE_HEIGHT){
+	    state = BDS_update_treehash(sk[SK_PSD:PYR_N], j, state);
+	    i = s_i;
+	    i += 1;
+	} else {
+	    i = (PYR_TREE_HEIGHT + 1) >> 1;
+	}
+    }
+    
+
+    return state;
+}

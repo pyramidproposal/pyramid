@@ -1,0 +1,849 @@
+/* PRF, thash */
+require "pyramid_params.jahh"
+require "fips202_shake256_PYR_N_PRF_INLEN.jahh"
+require "fips202_shake256_PYR_N_TH1_INLEN.jahh"
+require "fips202_shake256_PYR_N_TH2_INLEN.jahh"
+require "fips202_shake256_PYR_N_THLEN_INLEN.jahh"
+require "fips202_shake256_TH1_MASK_INLEN.jahh"
+require "fips202_shake256_TH2_MASK_INLEN.jahh"
+require "fips202_shake256_THLEN_MASK_INLEN.jahh"
+
+require "fips202_keccak_absorb_256_PRF_INLEN.jahh"
+require "fips202_keccak_absorb_256_TH1_INLEN.jahh"
+require "fips202_keccak_absorb_256_TH2_INLEN.jahh"
+require "fips202_keccak_absorb_256_THLEN_INLEN.jahh"
+require "fips202_keccak_absorb_256_MASK_INLEN.jahh"
+
+require "fips202_keccak_squeezeblocks_256_PYR_N.jahh"
+require "fips202_keccak_squeezeblocks_256_TH1.jahh"
+require "fips202_keccak_squeezeblocks_256_TH2.jahh"
+require "fips202_keccak_squeezeblocks_256_THLEN.jahh"
+
+/* h_msg */
+require "fips202_keccak_inc_init.jahh"
+require "fips202_keccak_inc_absorb_256_HMSG_CONST_INLEN.jahh"
+require "fips202_keccak_inc_absorb_256.jahh"
+require "fips202_keccak_inc_finalize_256.jahh"
+require "fips202_keccak_inc_squeeze_256_PYR_N.jahh"
+
+/* common */
+require "fips202_KeccakF1600_StatePermute.jahh"
+require "fips202_keccak_squeezeblocks_256_256.jahh"
+require "fips202_load64.jahh"
+require "fips202_store64.jahh"
+
+
+/* OUTLEN: PYR_N; INLEN: PRF_INLEN */
+export fn shake256_PYR_N_PRF_INLEN_jazz(reg u64 outputp, reg u64 inputp) 
+{
+	inline int i;
+
+	reg u8 t;
+
+	stack u8[PYR_N] output;
+	stack u8[PRF_INLEN] input;
+
+	stack u64 soutputp;
+
+	for i = 0 to PRF_INLEN {
+		t = (u8) [inputp + i];
+		input[i] = t;
+	}
+
+	soutputp = outputp;
+
+	output = shake256_PYR_N_PRF_INLEN(output, input);
+
+	outputp = soutputp;
+
+	for i = 0 to PYR_N {
+		t = output[i];
+		(u8) [outputp + i] = t;
+	}
+}
+
+/* OUTLEN: PYR_N; INLEN: TH1_INLEN */
+export fn shake256_PYR_N_TH1_INLEN_jazz(reg u64 outputp, reg u64 inputp) 
+{
+	inline int i;
+
+	reg u8 t;
+
+	stack u8[PYR_N] output;
+	stack u8[TH1_INLEN] input;
+
+	stack u64 soutputp;
+
+	for i = 0 to TH1_INLEN {
+		t = (u8) [inputp + i];
+		input[i] = t;
+	}
+
+	soutputp = outputp;
+
+	output = shake256_PYR_N_TH1_INLEN(output, input);
+
+	outputp = soutputp;
+
+	for i = 0 to PYR_N {
+		t = output[i];
+		(u8) [outputp + i] = t;
+	}
+}
+
+/* OUTLEN: PYR_N; INLEN: TH2_INLEN */
+export fn shake256_PYR_N_TH2_INLEN_jazz(reg u64 outputp, reg u64 inputp) 
+{
+	inline int i;
+
+	reg u8 t;
+
+	stack u8[PYR_N] output;
+	stack u8[TH2_INLEN] input;
+
+	stack u64 soutputp;
+
+	for i = 0 to TH2_INLEN {
+		t = (u8) [inputp + i];
+		input[i] = t;
+	}
+
+	soutputp = outputp;
+
+	output = shake256_PYR_N_TH2_INLEN(output, input);
+
+	outputp = soutputp;
+
+	for i = 0 to PYR_N {
+		t = output[i];
+		(u8) [outputp + i] = t;
+	}
+}
+
+/* OUTLEN: PYR_N; INLEN: THLEN_INLEN */
+export fn shake256_PYR_N_THLEN_INLEN_jazz(reg u64 outputp, reg u64 inputp) 
+{
+	inline int i;
+
+	reg u8 t;
+
+	stack u8[PYR_N] output;
+	stack u8[THLEN_INLEN] input;
+
+	stack u64 soutputp;
+
+	for i = 0 to THLEN_INLEN {
+		t = (u8) [inputp + i];
+		input[i] = t;
+	}
+
+	soutputp = outputp;
+
+	output = shake256_PYR_N_THLEN_INLEN(output, input);
+
+	outputp = soutputp;
+
+	for i = 0 to PYR_N {
+		t = output[i];
+		(u8) [outputp + i] = t;
+	}
+}
+
+/* OUTLEN: PYR_N; INLEN: MASK_INLEN */
+export fn shake256_TH1_MASK_INLEN_jazz(reg u64 outputp, reg u64 inputp) 
+{
+	inline int i;
+
+	reg u8 t;
+
+	stack u8[PYR_N] output;
+	stack u8[MASK_INLEN] input;
+
+	stack u64 soutputp;
+
+	for i = 0 to MASK_INLEN {
+		t = (u8) [inputp + i];
+		input[i] = t;
+	}
+
+	soutputp = outputp;
+
+	output = shake256_TH1_MASK_INLEN(output, input);
+
+	outputp = soutputp;
+
+	for i = 0 to PYR_N {
+		t = output[i];
+		(u8) [outputp + i] = t;
+	}
+}
+
+/* OUTLEN: 2*PYR_N; INLEN: MASK_INLEN */
+export fn shake256_TH2_MASK_INLEN_jazz(reg u64 outputp, reg u64 inputp) 
+{
+	inline int i;
+
+	reg u8 t;
+
+	stack u8[2*PYR_N] output;
+	stack u8[MASK_INLEN] input;
+
+	stack u64 soutputp;
+
+	for i = 0 to MASK_INLEN {
+		t = (u8) [inputp + i];
+		input[i] = t;
+	}
+
+	soutputp = outputp;
+
+	output = shake256_TH2_MASK_INLEN(output, input);
+
+	outputp = soutputp;
+
+	for i = 0 to 2*PYR_N {
+		t = output[i];
+		(u8) [outputp + i] = t;
+	}
+}
+
+/* OUTLEN: PYR_WOTS_BYTES; INLEN: MASK_INLEN */
+export fn shake256_THLEN_MASK_INLEN_jazz(reg u64 outputp, reg u64 inputp) 
+{
+	inline int i;
+
+	reg u8 t;
+
+	stack u8[PYR_WOTS_BYTES] output;
+	stack u8[MASK_INLEN] input;
+
+	stack u64 soutputp;
+
+	for i = 0 to MASK_INLEN {
+		t = (u8) [inputp + i];
+		input[i] = t;
+	}
+
+	soutputp = outputp;
+
+	output = shake256_THLEN_MASK_INLEN(output, input);
+
+	outputp = soutputp;
+
+	for i = 0 to PYR_WOTS_BYTES {
+		t = output[i];
+		(u8) [outputp + i] = t;
+	}
+}
+
+/* RATE: SHAKE256; MLEN: PRF_INLEN */
+export fn keccak_absorb_256_PRF_INLEN_jazz(reg u64 sp, reg u64 mp) 
+{
+	inline int i;
+
+	reg u8 tm;
+
+	reg u64 ts;
+
+	stack u8[PRF_INLEN] m;
+
+	stack u64[25] s;
+
+	stack u64 ssp;
+
+	for i = 0 to 25 {
+		ts = (u64) [sp + 8 * i];
+		s[i] = ts;
+	}
+
+	for i = 0 to PRF_INLEN {
+		tm = (u8) [mp + i];
+		m[i] = tm;
+	}
+
+	ssp = sp;
+
+	s = keccak_absorb_256_PRF_INLEN(s, m);
+
+	sp = ssp;
+
+	for i = 0 to 25 {
+		ts = s[i];
+		(u64) [sp + 8 * i] = ts;
+	}
+}
+
+/* RATE: SHAKE256; MLEN: TH1_INLEN */
+export fn keccak_absorb_256_TH1_INLEN_jazz(reg u64 sp, reg u64 mp) 
+{
+	inline int i;
+
+	reg u8 tm;
+
+	reg u64 ts;
+
+	stack u8[TH1_INLEN] m;
+
+	stack u64[25] s;
+
+	stack u64 ssp;
+
+	for i = 0 to 25 {
+		ts = (u64) [sp + 8 * i];
+		s[i] = ts;
+	}
+
+	for i = 0 to TH1_INLEN {
+		tm = (u8) [mp + i];
+		m[i] = tm;
+	}
+
+	ssp = sp;
+
+	s = keccak_absorb_256_TH1_INLEN(s, m);
+
+	sp = ssp;
+
+	for i = 0 to 25 {
+		ts = s[i];
+		(u64) [sp + 8 * i] = ts;
+	}
+}
+
+/* RATE: SHAKE256; MLEN: TH2_INLEN */
+export fn keccak_absorb_256_TH2_INLEN_jazz(reg u64 sp, reg u64 mp) 
+{
+	inline int i;
+
+	reg u8 tm;
+
+	reg u64 ts;
+
+	stack u8[TH2_INLEN] m;
+
+	stack u64[25] s;
+
+	stack u64 ssp;
+
+	for i = 0 to 25 {
+		ts = (u64) [sp + 8 * i];
+		s[i] = ts;
+	}
+
+	for i = 0 to TH2_INLEN {
+		tm = (u8) [mp + i];
+		m[i] = tm;
+	}
+
+	ssp = sp;
+
+	s = keccak_absorb_256_TH2_INLEN(s, m);
+
+	sp = ssp;
+
+	for i = 0 to 25 {
+		ts = s[i];
+		(u64) [sp + 8 * i] = ts;
+	}
+}
+
+/* RATE: SHAKE256; MLEN: THLEN_INLEN */
+export fn keccak_absorb_256_THLEN_INLEN_jazz(reg u64 sp, reg u64 mp) 
+{
+	inline int i;
+
+	reg u8 tm;
+
+	reg u64 ts;
+
+	stack u8[THLEN_INLEN] m;
+
+	stack u64[25] s;
+
+	stack u64 ssp;
+
+	for i = 0 to 25 {
+		ts = (u64) [sp + 8 * i];
+		s[i] = ts;
+	}
+
+	for i = 0 to THLEN_INLEN {
+		tm = (u8) [mp + i];
+		m[i] = tm;
+	}
+
+	ssp = sp;
+
+	s = keccak_absorb_256_THLEN_INLEN(s, m);
+
+	sp = ssp;
+
+	for i = 0 to 25 {
+		ts = s[i];
+		(u64) [sp + 8 * i] = ts;
+	}
+}
+
+/* RATE: SHAKE256; MLEN: MASK_INLEN */
+export fn keccak_absorb_256_MASK_INLEN_jazz(reg u64 sp, reg u64 mp) 
+{
+	inline int i;
+
+	reg u8 tm;
+
+	reg u64 ts;
+
+	stack u8[MASK_INLEN] m;
+
+	stack u64[25] s;
+
+	stack u64 ssp;
+
+	for i = 0 to 25 {
+		ts = (u64) [sp + 8 * i];
+		s[i] = ts;
+	}
+
+	for i = 0 to MASK_INLEN {
+		tm = (u8) [mp + i];
+		m[i] = tm;
+	}
+
+	ssp = sp;
+
+	s = keccak_absorb_256_MASK_INLEN(s, m);
+
+	sp = ssp;
+
+	for i = 0 to 25 {
+		ts = s[i];
+		(u64) [sp + 8 * i] = ts;
+	}
+}
+
+/* RATE: SHAKE256; OUTLEN: PYR_N */
+export fn keccak_squeezeblocks_256_PYR_N_jazz(reg u64 hp, reg u64 sp)
+{
+	inline int i;
+
+	reg u8 th;
+
+	reg u64 ts;
+
+	stack u8[PYR_N] h;
+
+	stack u64[25] s;
+
+	stack u64 shp;
+	stack u64 ssp;
+
+	for i = 0 to PYR_N {
+		th = (u8) [hp + i];
+		h[i] = th;
+	}
+
+	for i = 0 to 25 {
+		ts = (u64) [sp + 8 * i];
+		s[i] = ts;
+	}
+
+	shp = hp;
+	ssp = sp;
+
+	h, s = keccak_squeezeblocks_256_PYR_N(h, s);
+
+	hp = shp;
+	sp = ssp;
+
+	for i = 0 to PYR_N {
+		th = h[i];
+		(u8) [hp + i] = th;
+	}
+
+	for i = 0 to 25 {
+		ts = s[i];
+		(u64) [sp + 8 * i] = ts;
+	}
+
+}
+
+/* RATE: SHAKE256; OUTLEN: PYR_N */
+export fn keccak_squeezeblocks_256_TH1_jazz(reg u64 hp, reg u64 sp)
+{
+	inline int i;
+
+	reg u8 th;
+
+	reg u64 ts;
+
+	stack u8[PYR_N] h;
+
+	stack u64[25] s;
+
+	stack u64 shp;
+	stack u64 ssp;
+
+	for i = 0 to PYR_N {
+		th = (u8) [hp + i];
+		h[i] = th;
+	}
+
+	for i = 0 to 25 {
+		ts = (u64) [sp + 8 * i];
+		s[i] = ts;
+	}
+
+	shp = hp;
+	ssp = sp;
+
+	h, s = keccak_squeezeblocks_256_TH1(h, s);
+
+	hp = shp;
+	sp = ssp;
+
+	for i = 0 to PYR_N {
+		th = h[i];
+		(u8) [hp + i] = th;
+	}
+
+	for i = 0 to 25 {
+		ts = s[i];
+		(u64) [sp + 8 * i] = ts;
+	}
+
+}
+
+/* RATE: SHAKE256; OUTLEN: 2*PYR_N */
+export fn keccak_squeezeblocks_256_TH2_jazz(reg u64 hp, reg u64 sp)
+{
+	inline int i;
+
+	reg u8 th;
+
+	reg u64 ts;
+
+	stack u8[2*PYR_N] h;
+
+	stack u64[25] s;
+
+	stack u64 shp;
+	stack u64 ssp;
+
+	for i = 0 to 2*PYR_N {
+		th = (u8) [hp + i];
+		h[i] = th;
+	}
+
+	for i = 0 to 25 {
+		ts = (u64) [sp + 8 * i];
+		s[i] = ts;
+	}
+
+	shp = hp;
+	ssp = sp;
+
+	h, s = keccak_squeezeblocks_256_TH2(h, s);
+
+	hp = shp;
+	sp = ssp;
+
+	for i = 0 to 2*PYR_N {
+		th = h[i];
+		(u8) [hp + i] = th;
+	}
+
+	for i = 0 to 25 {
+		ts = s[i];
+		(u64) [sp + 8 * i] = ts;
+	}
+
+}
+
+/* RATE: SHAKE256; OUTLEN: PYR_WOTS_BYTES */
+export fn keccak_squeezeblocks_256_THLEN_jazz(reg u64 hp, reg u64 sp)
+{
+	inline int i;
+
+	reg u8 th;
+
+	reg u64 ts;
+
+	stack u8[PYR_WOTS_BYTES] h;
+
+	stack u64[25] s;
+
+	stack u64 shp;
+	stack u64 ssp;
+
+	for i = 0 to PYR_WOTS_BYTES {
+		th = (u8) [hp + i];
+		h[i] = th;
+	}
+
+	for i = 0 to 25 {
+		ts = (u64) [sp + 8 * i];
+		s[i] = ts;
+	}
+
+	shp = hp;
+	ssp = sp;
+
+	h, s = keccak_squeezeblocks_256_THLEN(h, s);
+
+	hp = shp;
+	sp = ssp;
+
+	for i = 0 to PYR_WOTS_BYTES {
+		th = h[i];
+		(u8) [hp + i] = th;
+	}
+
+	for i = 0 to 25 {
+		ts = s[i];
+		(u64) [sp + 8 * i] = ts;
+	}
+
+}
+
+export fn keccak_inc_init_jazz(reg u64 sp)
+{
+	inline int i;
+
+	reg u64 ts;
+
+	stack u64[26] s;
+
+	stack u64 ssp;
+
+	for i = 0 to 26 {
+		ts = (u64) [sp + 8 * i];
+		s[i] = ts;
+	}
+
+	ssp = sp;
+
+	s = keccak_inc_init(s);
+
+	sp = ssp;
+
+	for i = 0 to 26 {
+		ts = s[i];
+		(u64) [sp + 8 * i] = ts;
+	}
+}
+
+/* RATE: SHAKE256 */
+export fn keccak_inc_absorb_256_jazz(reg u64 s_incp, reg u64 mp, reg u64 mlen) 
+{
+	inline int i;
+	
+	reg u64 ts;
+
+	stack u64[26] s_inc;
+
+	stack u64 ss_incp;
+
+	for i = 0 to 26 {
+		ts = (u64) [s_incp + 8 * i];
+		s_inc[i] = ts;
+	}
+
+	ss_incp = s_incp;
+
+	s_inc = keccak_inc_absorb_256(s_inc, mp, mlen);
+
+	s_incp = ss_incp;
+
+	for i = 0 to 26 {
+		ts = s_inc[i];
+		(u64) [s_incp + 8 * i] = ts;
+	}
+}
+
+/* RATE: SHAKE256; MLEN: HMSG_CONST_INLEN */
+export fn keccak_inc_absorb_256_HMSG_CONST_INLEN_jazz(reg u64 s_incp, reg u64 mp) 
+{
+	inline int i;
+	
+	reg u64 ts;
+
+	reg u8 tm;
+
+	stack u64[26] s_inc;
+
+	stack u8[HMSG_CONST_INLEN] m;
+
+	stack u64 ss_incp;
+
+	for i = 0 to 26 {
+		ts = (u64) [s_incp + 8 * i];
+		s_inc[i] = ts;
+	}
+
+	for i = 0 to HMSG_CONST_INLEN {
+		tm = (u8)[mp + i];
+		m[i] = tm;
+	}
+
+	ss_incp = s_incp;
+
+	s_inc = keccak_inc_absorb_256_HMSG_CONST_INLEN(s_inc, m);
+
+	s_incp = ss_incp;
+
+	for i = 0 to 26 {
+		ts = s_inc[i];
+		(u64) [s_incp + 8 * i] = ts;
+	}
+}
+
+/* RATE: SHAKE256 */
+export fn keccak_inc_finalize_256_jazz(reg u64 s_incp)
+{
+	inline int i;
+
+	stack u64[26] s_inc;
+
+	reg u64 ts;
+
+	for i = 0 to 26 {
+		ts = (u64) [s_incp + 8 * i];
+		s_inc[i] = ts;
+	}
+	
+	s_inc = keccak_inc_finalize_256(s_inc);
+
+	for i = 0 to 26 {
+		ts = s_inc[i];
+		(u64) [s_incp + 8 * i] = ts;
+	}
+}
+
+/* RATE: SHAKE256; OUTLEN: PYR_N */
+export fn keccak_inc_squeeze_256_PYR_N_jazz(reg u64 hp, reg u64 sp)
+{
+	inline int i;
+
+	reg u8 t8;
+	reg u64 t64;
+
+	stack u8[PYR_N] output;
+	stack u64[25] s;
+
+	stack u64 soutputp;
+
+	for i = 0 to 25 {
+		t64 = (u64) [sp + 8*i];
+		s[i] = t64;
+	}
+
+	soutputp = hp;
+
+	output, s = keccak_inc_squeeze_256_PYR_N(output, s);
+
+	hp = soutputp;
+
+	for i = 0 to PYR_N {
+		t8 = output[i];
+		(u8) [hp + i] = t8;
+	}
+}
+
+
+/* RATE: SHAKE256; OUTLEN: SHAKE256 */
+export fn keccak_squeezeblocks_256_256_jazz(reg u64 hp, reg u64 sp)
+{
+	inline int i;
+
+	reg u8 th;
+
+	reg u64 ts;
+
+	stack u8[SHAKE256_RATE] h;
+
+	stack u64[25] s;
+
+	stack u64 shp;
+	stack u64 ssp;
+
+	for i = 0 to 25 {
+		ts = (u64) [sp + 8 * i];
+		s[i] = ts;
+	}
+
+	shp = hp;
+	ssp = sp;
+
+	h, s = keccak_squeezeblocks_256_256(h, s);
+
+	hp = shp;
+	sp = ssp;
+
+	for i = 0 to SHAKE256_RATE {
+		th = h[i];
+		(u8) [hp + i] = th;
+	}
+
+	for i = 0 to 25 {
+		ts = s[i];
+		(u64) [sp + 8 * i] = ts;
+	}
+
+}
+
+export fn KeccakF1600_StatePermute_jazz(reg u64 statep)
+{
+	inline int i;
+	
+	reg u64 t;
+
+	stack u64[25] state;
+
+	for i = 0 to 25 {
+		t = (u64) [statep + 8 * i];
+		state[i] = t;
+	}
+
+	state = KeccakF1600_StatePermute(state);
+
+	for i = 0 to 25 {
+		t = state[i];
+		(u64) [statep + 8 * i] = t;
+	}
+}
+
+export fn load64_jazz(reg u64 xp) -> reg u64
+{
+	inline int i;
+
+	reg u8 t;
+
+	reg u64 r;
+
+	stack u8[8] x;
+
+	for i = 0 to 8 {
+		t = (u8) [xp + i];
+		x[i] = t;
+	}
+
+	r = load64(x);
+
+	return r;
+}
+
+export fn store64_jazz(reg u64 xp, reg u64 u)
+{
+	inline int i;
+
+	reg u8 t;
+
+	stack u8[8] x;
+
+	x = store64(x, u);
+
+	for i = 0 to 8 {
+		t = x[i];
+		(u8) [xp + i] = t;
+	}
+}

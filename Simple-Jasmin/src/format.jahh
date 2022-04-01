@@ -1,0 +1,53 @@
+/* Predicate: is idx the last valid index? */
+inline fn last_idxp(reg u64 idx) -> reg bool
+{
+    inline int last_idx;
+    reg bool res;
+    
+    if((PYR_FULL_HEIGHT % 8) == 0){
+        last_idx = ((1 << PYR_FULL_HEIGHT) - 2);
+    } else {
+        last_idx = ((1 << PYR_FULL_HEIGHT) - 1);
+    }
+    res = (idx == last_idx);
+    
+    return res;
+}
+
+/* Predicate: is idx an invalid index? */
+inline fn invalid_idxp(reg u64 idx) -> reg bool
+{
+    inline int invalid_idx;
+    reg bool res;
+    
+    if((PYR_FULL_HEIGHT % 8) == 0) {
+        invalid_idx = ((1 << PYR_FULL_HEIGHT) - 1);
+	res = (idx >= invalid_idx);
+    } else {
+        invalid_idx = ((1 << PYR_FULL_HEIGHT) - 1);
+	res = (idx > invalid_idx);
+    }
+    return res;
+}
+
+/* Overwrite the secret key with zeroes. Set the index to -1.  */
+inline fn delete_sk(reg ptr u8[PYR_SK_BYTES] sk) -> reg ptr u8[PYR_SK_BYTES]
+{
+    inline int i offset;
+    
+    for i = 0 to PYR_IDX_BYTES {
+        sk[SK_IDX + i] = 0xff;
+    }
+    for i = 0 to PYR_D {
+        offset = SK_SSD + i * PYR_N;
+    	sk[offset:PYR_N] = zero_N(sk[offset:PYR_N]);
+    }
+    sk[SK_PRF:PYR_N] = zero_N(sk[SK_PRF:PYR_N]);
+    sk[SK_PRT:PYR_N] = zero_N(sk[SK_PRT:PYR_N]);
+    sk[SK_PSD:PYR_N] = zero_N(sk[SK_PSD:PYR_N]);
+    for i = 0 to XMSSMT_STATE_BYTES {
+        sk[PYR_SK_CORE_BYTES + i] = 0;
+    }
+    
+    return sk;
+}

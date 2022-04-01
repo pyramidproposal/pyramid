@@ -1,0 +1,57 @@
+require "pyramid_params.jahh"
+require "simple_tree_sig.jahh"
+
+/* Takes sk argument, instead of [sk_ssd, sk_psd] due to ABI limit */
+export fn tree_sig_jazz(reg u64 sigp, reg u64 Mp, reg u64 skp,
+                        reg u32 idx_leaf, reg u64 subtree_addrp, reg u64 auth_pathp)
+{
+	inline int i;
+
+	reg u8 a8;
+
+	reg u32 a32 leaf_idx;
+
+	stack u8[PYR_XMSS_BYTES] sig;
+
+	stack u8[AUTH_BYTES] auth_path;
+
+	stack u8[PYR_N] M;
+
+	stack u8[PYR_SK_CORE_BYTES] sk;
+
+	stack u32[8] subtree_addr;
+
+	stack u64 s_sigp;
+
+	for i = 0 to PYR_N {
+		a8 = (u8) [Mp + i];
+		M[i] = a8;
+	}
+
+	for i = 0 to PYR_SK_CORE_BYTES {
+		a8 = (u8) [skp + i];
+		sk[i] = a8;
+	}
+
+	for i = 0 to 8 {
+		a32 = (u32) [subtree_addrp + 4*i];
+		subtree_addr[i] = a32;
+	}
+
+	for i = 0 to AUTH_BYTES {
+		a8 = (u8) [auth_pathp + i];
+		auth_path[i] = a8;
+	}
+	
+	s_sigp = sigp;
+
+	sig = tree_sig(sig, M, sk[SK_SSD:PYR_N], sk[SK_PSD:PYR_N], idx_leaf,
+	               subtree_addr, auth_path);
+			    
+	sigp = s_sigp;
+
+	for i = 0 to PYR_XMSS_BYTES {
+		a8 = sig[i];
+		(u8) [sigp + i] = a8;
+	}
+}

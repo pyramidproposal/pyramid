@@ -1,0 +1,33 @@
+require "crypto_hashblocks.jahh"
+
+export fn crypto_hashblocks_jazz(reg u64 statebytesp, reg u64 inp, reg u64 inlen)
+-> reg u32
+{
+  inline int i;
+
+  stack u8[64] statebytes;
+
+  stack u64 s_statebytesp;
+
+  reg u8 t8;
+
+  reg u32 t32;
+
+  for i = 0 to 64 {
+    t8 = (u8)[statebytesp + i];
+    statebytes[i] = t8;
+  }
+
+  s_statebytesp = statebytesp;
+
+  statebytes, inp, t32 = crypto_hashblocks(statebytes, inp, inlen);
+
+  statebytesp = s_statebytesp;
+
+  for i = 0 to 64 {
+    t8 = statebytes[i];
+    (u8)[statebytesp + i] = t8;
+  }
+
+  return t32;
+}

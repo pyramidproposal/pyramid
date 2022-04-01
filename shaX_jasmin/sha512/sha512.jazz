@@ -1,0 +1,69 @@
+require "sha512.jahh"
+require "sha512_INLEN.jahh"
+
+export fn iterate_hash_jazz(reg u64 mp, reg u64 valp){
+  inline int i;
+
+  stack u64[16] m;
+
+  stack u64[8] val;
+
+  stack u64 s_valp;
+
+  reg u64 a64;
+
+  for i = 0 to 16 {
+    a64 = (u64) [mp + 8*i];
+    m[i] = a64;
+  }
+
+  for i = 0 to 8 {
+    a64 = (u64) [valp + 8*i];
+    val[i] = a64;
+  }
+
+  s_valp = valp;
+
+  val = iterate_hash(m, val);
+
+  valp = s_valp;
+
+  for i = 0 to 8 {
+    a64 = val[i];
+    (u64) [valp + 8*i] = a64;
+  }
+}
+
+export fn get_INLEN_jazz() -> reg u64{
+    reg u64 a64;
+    a64 = INLEN;
+    return a64;
+}
+
+export fn sha512_INLEN_jazz(reg u64 outputp, reg u64 inputp){
+  inline int i;
+
+  stack u8[64] output;
+
+  stack u8[INLEN] input;
+
+  stack u64 s_outputp;
+
+  reg u8 a8;
+
+  for i = 0 to INLEN {
+    a8 = (u8) [inputp + i];
+    input[i] = a8;
+  }
+
+  s_outputp = outputp;
+
+  output = sha512_INLEN(output, input);
+
+  outputp = s_outputp;
+
+  for i = 0 to 64 {
+    a8 = output[i];
+    (u8) [outputp + i] = a8;
+  }
+}

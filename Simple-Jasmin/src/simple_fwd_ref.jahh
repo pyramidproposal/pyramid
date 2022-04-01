@@ -1,0 +1,34 @@
+require "pyramid_params.jahh"
+require "pyr_address.jahh"
+require "pyr_hash_shake256.jahh"
+
+/* 
+   Forwards the FSG reference nr_apply times.
+   This function is currently only used in BDS_stategen; 
+   therefore it is inlined and takes an inline argument nr_apply.
+*/
+inline fn fwd_ref(stack u8[PYR_N] ref, stack u8[PYR_N] pub_seed,
+                   inline int nr_apply, stack u32[8] start_addr)
+-> stack u8[PYR_N]
+{
+    reg u32 i;
+    stack u32[8] iter_addr;
+
+    stack u32 s_i;
+
+    iter_addr = init_addr(iter_addr);
+    iter_addr = copy_keypair_addr(iter_addr, start_addr);
+
+    i = 0;
+    while(i < nr_apply){
+        s_i = i;
+	
+        ref = fsg_1_comp(ref, pub_seed, iter_addr);
+	iter_addr = increment_address(iter_addr);
+	
+	i = s_i;
+	i += 1;
+    }
+    
+    return ref;
+}

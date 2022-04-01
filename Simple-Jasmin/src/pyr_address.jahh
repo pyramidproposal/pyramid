@@ -1,0 +1,340 @@
+require "pyramid_params.jahh"
+
+/* The number of bytes required to enumerate all keypairs in a tree. */
+param int kp_bytes = (PYR_TREE_HEIGHT + 7) / 8;
+param int PYR_OFFSET_DIRECTION = PYR_OFFSET_CHAIN_ADDR;
+
+/* 
+    init_addr is consistent with c notation uint32_t addr[8] = {0}; 
+    Optimizations could resort to vector instructions, or initialize only certain fields 
+    to zero: in practice some fields are overwritten immediately anyway.
+*/
+inline fn init_addr(reg ptr u32[8] addr)
+-> reg ptr u32[8]
+{
+    inline int i;
+    for i = 0 to 8 {
+        addr[i] = 0;
+    }
+    return addr;
+}
+
+/* Set the hypertree layer field in addr. */
+inline fn set_layer_addr(reg ptr u32[8] addr, reg u32 layer)
+-> reg ptr u32[8]
+{
+    reg u8 layer8;
+    layer8 = (8u)layer;
+    addr[u8 PYR_OFFSET_LAYER] = layer8;
+    return addr;
+}
+
+/* Set the hypertree layer field in addr (inline int argument). */
+inline fn set_layer_addr_(reg ptr u32[8] addr, inline int layer)
+-> reg ptr u32[8]
+{
+    addr[u8 PYR_OFFSET_LAYER] = layer;
+    return addr;
+}
+
+
+/* Set the tree address field in addr.
+   Always overwrites the entire 8-byte field. */
+inline fn set_tree_addr(reg ptr u32[8] addr, reg u64 tree)
+-> reg ptr u32[8]
+{
+    inline int i;
+    reg u8 tree8;
+    reg u64 tree64;
+
+    /* Upper bound could be lowered(?) */
+    tree64 = tree;
+    for i = 7 downto -1 {
+        tree8 = (8u)tree64;
+	addr[u8 PYR_OFFSET_TREE + i] = tree8;
+	tree64 >>= 8;
+    }
+    return addr;
+}
+
+/* Set the tree address field in addr (inline int argument). 
+   Always overwrites the entire 8-byte field. */
+inline fn set_tree_addr_(reg ptr u32[8] addr, inline int tree)
+-> reg ptr u32[8]
+{
+    inline int i;
+
+    for i = 7 downto -1 {
+	addr[u8 PYR_OFFSET_TREE + i] = tree;
+	tree >>= 8;
+    }
+    return addr;
+}
+
+/* Set the type field in addr. 
+   set_type naturally only takes an inline int argument. */
+inline fn set_type(reg ptr u32[8] addr, inline int type)
+-> reg ptr u32[8]
+{
+    addr[u8 PYR_OFFSET_TYPE] = type;
+    return addr;
+}
+
+/* Copy the layer and tree fields from in to out. */
+inline fn copy_subtree_addr(reg ptr u32[8] out, reg ptr u32[8] in)
+-> reg ptr u32[8]
+{
+    inline int i;
+    reg u8 a;
+
+    a = in[u8 PYR_OFFSET_LAYER];
+    out[u8 PYR_OFFSET_LAYER] = a;
+
+    for i = 0 to 8 {
+        a = in[u8 PYR_OFFSET_TREE + i];
+    	out[u8 PYR_OFFSET_TREE + i] = a;
+    }
+    return out;
+}
+
+/* Set the OTS keypair field in addr. */
+/* Note: MUST ensure that PYR_OFFSET_KP_ADDRi + 1 = PYR_OFFSET_KP_ADDRi, 
+   i.e. keypair address offsets are continuous. */
+inline fn set_keypair_addr(reg ptr u32[8] addr, reg u32 keypair)
+-> reg ptr u32[8]
+{
+    inline int i;
+    reg u8  keypair8;
+    reg u32 keypair32;
+
+    keypair32 = keypair;
+    for i = 0 to kp_bytes {
+        keypair8 = (8u)keypair32;
+	addr[u8 PYR_OFFSET_KP_ADDR1 - i] = keypair8;
+	keypair32 >>= 8;
+    }
+    /* Remaining bytes are assumed to be zero-initialized. */    
+    return addr;
+}
+
+/* Set the OTS keypair field in addr. */
+/* Note: MUST ensure that PYR_OFFSET_KP_ADDRi + 1 = PYR_OFFSET_KP_ADDRi, 
+   i.e. keypair address offsets are continuous. */
+inline fn set_keypair_addr_(reg ptr u32[8] addr, inline int keypair)
+-> reg ptr u32[8]
+{
+    inline int i;
+
+    for i = 0 to kp_bytes {
+	addr[u8 PYR_OFFSET_KP_ADDR1 - i] = keypair;
+	keypair >>= 8;
+    }
+    /* Remaining bytes are assumed to be zero-initialized. */        
+    return addr;
+}
+
+/* Copy the layer, tree, and OTS keypair field from in to out. */
+/* Note: MUST ensure that PYR_OFFSET_KP_ADDRi + 1 = PYR_OFFSET_KP_ADDRi, 
+   i.e. keypair address offsets are continuous. */
+inline fn copy_keypair_addr(reg ptr u32[8] out, reg ptr u32[8] in)
+-> reg ptr u32[8]
+{
+    inline int i;
+    reg u8 a;
+    
+    out = copy_subtree_addr(out, in);
+
+    for i = 0 to kp_bytes {
+    	a = in[u8 PYR_OFFSET_KP_ADDR1 - i];
+	out[u8 PYR_OFFSET_KP_ADDR1 - i] = a;
+    }
+    return out;
+}
+
+/* Set the chain address field in addr. */
+/* Always loop over all chains, no need for non-inline version (purely included for testing). */
+inline fn set_chain_addr(reg ptr u32[8] addr, reg u32 chain)
+-> reg ptr u32[8]
+{
+    reg u8 chain8;
+    chain8 = (8u)chain;
+    addr[u8 PYR_OFFSET_CHAIN_ADDR] = chain8;
+    return addr;
+}
+
+/* Set the chain address field in addr (inline int argument). */
+inline fn set_chain_addr_(reg ptr u32[8] addr, inline int chain)
+-> reg ptr u32[8]
+{
+    addr[u8 PYR_OFFSET_CHAIN_ADDR] = chain;
+    return addr;
+}
+
+/* Set the hash address field in addr. */
+inline fn set_hash_addr(reg ptr u32[8] addr, reg u32 hash)
+-> reg ptr u32[8]
+{
+    reg u8 hash8;
+    hash8 = (8u)hash;
+    addr[u8 PYR_OFFSET_HASH_ADDR] = hash8;
+    return addr;
+}
+
+/* Set the tree height field in addr. */
+inline fn set_tree_height(reg ptr u32[8] addr, reg u32 tree_height)
+-> reg ptr u32[8]
+{
+    reg u8 tree_height8;
+    tree_height8 = (8u)tree_height;
+    addr[u8 PYR_OFFSET_TREE_HGT] = tree_height8;
+    return addr;
+}
+
+/* Set the tree height field in addr (inline int argument). */
+inline fn set_tree_height_(reg ptr u32[8] addr, inline int tree_height)
+-> reg ptr u32[8]
+{
+    addr[u8 PYR_OFFSET_TREE_HGT] = tree_height;
+    return addr;
+}
+
+/* Set the tree index field in addr. */
+inline fn set_tree_index(reg ptr u32[8] addr, reg u32 tree_index)
+-> reg ptr u32[8]
+{
+    inline int i;
+    reg u8 tree_index8;
+    reg u32 tree_index32;
+
+    tree_index32 = (32u)tree_index;
+    for i = 3 downto -1 {
+        tree_index8 = (8u)tree_index32;
+	addr[u8 PYR_OFFSET_TREE_INDEX + i] = tree_index8;
+	tree_index32 >>= 8;
+    }
+    return addr;
+}
+
+/* Set the tree index field in addr (inline int argument). */
+inline fn set_tree_index_(reg ptr u32[8] addr, inline int tree_index)
+-> reg ptr u32[8]
+{
+    inline int i;
+
+    for i = 3 downto -1 {
+	addr[u8 PYR_OFFSET_TREE_INDEX + i] = tree_index;
+	tree_index >>= 8;
+    }
+    return addr;
+}
+
+/* Simple: get the tree index field from addr. */
+inline fn get_tree_addr(reg ptr u32[8] addr)
+-> reg u64
+{
+    inline int i;
+    reg u8 tree8;
+    reg u64 tree64, tmp;
+
+    tree64 = 0;
+    for i = 0 to 8 {
+    	tree8 = addr[u8 PYR_OFFSET_TREE + i];
+	tmp = (64u)tree8;
+	tree64 <<= 8;
+	tree64 ^= tmp;
+    }
+    return tree64;
+}
+
+/* Simple: get the OTS index field from addr. */
+/* Note: MUST ensure that PYR_OFFSET_KP_ADDRi + 1 = PYR_OFFSET_KP_ADDRi, 
+   i.e. keypair address offsets are continuous. */
+inline fn get_keypair_addr(reg ptr u32[8] addr)
+-> reg u32
+{
+    inline int i;
+    reg u8 keypair8;
+    reg u32 keypair32 tmp;
+
+    keypair32 = 0;
+    for i = 0 to kp_bytes {
+    	keypair8 = addr[u8 PYR_OFFSET_KP_ADDR1 - i];
+	tmp = (32u)keypair8;
+	keypair32 <<= 8;
+	keypair32 ^= tmp;
+    }
+    return keypair32;
+}
+
+/* idx uniquely identifies a (keypair, tree) address at layer 0. */
+inline fn set_keypair_addr_bottom(reg ptr u32[8] addr, reg u64 idx)
+-> reg ptr u32[8]
+{
+    reg u64 tree_idx;
+    reg u32 keypair_idx;
+    
+    addr = set_layer_addr_(addr, 0);
+    tree_idx = idx;
+    tree_idx >>= PYR_TREE_HEIGHT;
+    addr = set_tree_addr(addr, tree_idx);
+    keypair_idx = (32u)idx;
+    keypair_idx &= (1 << PYR_TREE_HEIGHT) - 1;
+    addr = set_keypair_addr(addr, keypair_idx);
+    return addr;
+}
+
+/* 
+Increment address, potentially to an address in a tree to its right.
+Also safe when PYR_TREE_HEIGHT % 8 = 0 (allows carry).
+*/
+inline fn increment_address(reg ptr u32[8] addr)
+-> reg ptr u32[8]
+{
+    reg u32 keypair_addr;
+    reg u64 tree_addr, c;
+
+    keypair_addr = get_keypair_addr(addr);
+    tree_addr = get_tree_addr(addr);
+    
+    keypair_addr += 1;
+    c = (64u)keypair_addr;
+    c >>= PYR_TREE_HEIGHT;
+    c &= 1;
+    keypair_addr &= (1 << PYR_TREE_HEIGHT) - 1;
+    addr = set_keypair_addr(addr, keypair_addr);
+    tree_addr += c;
+    addr = set_tree_addr(addr, tree_addr);
+    return addr;
+}
+
+/* Convert addr back to bytes. */
+inline fn store_addr(reg ptr u8[PYR_ADDR_BYTES] out, reg ptr u32[8] addr)
+-> reg ptr u8[PYR_ADDR_BYTES]
+{
+    inline int i;
+    reg u8 a;
+
+    for i = 0 to PYR_ADDR_BYTES {
+        a = addr[u8 i];
+	out[i] = a;
+    }
+    return out;
+}
+
+/* Set the FSG direction in addr. */
+inline fn set_direction(reg ptr u32[8] addr, reg u32 direction)
+-> reg ptr u32[8]
+{
+    reg u8 direction8;
+    direction8 = (8u)direction;
+    addr[u8 PYR_OFFSET_DIRECTION] = direction8;
+    return addr;
+}
+
+/* Set the FSG direction in addr (inline int argument). */
+inline fn set_direction_(reg ptr u32[8] addr, inline int direction)
+-> reg ptr u32[8]
+{
+    addr[u8 PYR_OFFSET_DIRECTION] = direction;
+    return addr;
+}

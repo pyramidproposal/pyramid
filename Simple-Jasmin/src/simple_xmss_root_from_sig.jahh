@@ -1,0 +1,66 @@
+require "pyramid_params.jahh"
+require "pyr_wots.jahh"
+require "pyr_address.jahh"
+require "utils.jahh"
+require "pyr_compute_root.jahh"
+
+/* Compute the tree root from an XMSS signature. This routine is repeated d times during 
+   signature generation; it would be more efficient to move parts of address initialization
+   outside of the loop. Similarly, consider spilling the arguments once outside of the loop.
+   We chose to stick with the Simple reference code for now.  */
+#[returnaddress="stack"]
+fn xmss_root_from_sig_comp(reg ptr u8[PYR_N] root, reg u32 idx_leaf,
+	                   reg const ptr u8[PYR_XMSS_BYTES] sig,
+			   reg const ptr u8[PYR_N] sk_psd,
+	     	      	   reg const ptr u32[8] subtree_addr)
+-> reg ptr u8[PYR_N]
+{
+    inline int offset;
+    reg u32 tree_height;
+    stack u32 [8] wots_addr;
+    stack u32 [8] wotspk_addr;
+    stack u8[PYR_WOTS_PK_BYTES] wots_pk;
+    stack u8[PYR_N] leaf;
+
+    stack ptr u8[PYR_N] s_root;
+    stack const ptr u8[PYR_XMSS_BYTES] s_sig;
+    stack const ptr u8[PYR_N] s_sk_psd;
+    stack u32 s_idx_leaf;
+    stack const ptr u32[8] s_subtree_addr;
+
+    wots_addr = init_addr(wots_addr);
+    wots_addr = copy_subtree_addr(wots_addr, subtree_addr);
+    wots_addr = set_type(wots_addr, PYR_ADDR_TYPE_WOTS);
+    wots_addr = set_keypair_addr(wots_addr, idx_leaf);
+    
+    wotspk_addr = init_addr(wotspk_addr);
+    wotspk_addr = copy_subtree_addr(wotspk_addr, subtree_addr);
+    wotspk_addr = set_type(wotspk_addr, PYR_ADDR_TYPE_WOTSPK);
+    wotspk_addr = set_keypair_addr(wotspk_addr, idx_leaf);
+
+    s_root = root;
+    s_idx_leaf = idx_leaf;
+    s_sig = sig;
+    s_sk_psd = sk_psd;
+    s_subtree_addr = subtree_addr;
+
+    /* Compute leaf (compressed WOTS public key). */
+    offset = 0;
+    wots_pk, wots_addr = wots_pk_from_sig(wots_pk, sig[offset:PYR_WOTS_BYTES], root,
+                                          sk_psd, wots_addr);
+    sk_psd = s_sk_psd;    
+    leaf = thashLEN(leaf, wots_pk, sk_psd, wotspk_addr);
+
+    /* Traversal from leaf using the authentication path in signature. */
+    offset = PYR_WOTS_BYTES;
+    tree_height = PYR_TREE_HEIGHT;
+    root = s_root;
+    idx_leaf = s_idx_leaf;
+    sig = s_sig;
+    sk_psd = s_sk_psd;
+    subtree_addr = s_subtree_addr;
+    root = compute_root(root, leaf, sig[offset:AUTH_BYTES], sk_psd,
+                        idx_leaf, tree_height, subtree_addr);
+
+    return root;
+}

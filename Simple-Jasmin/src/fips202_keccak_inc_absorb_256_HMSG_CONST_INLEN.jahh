@@ -1,0 +1,62 @@
+require "pyramid_params.jahh"
+require "fips202_KeccakF1600_StatePermute.jahh"
+require "fips202_load64.jahh"
+
+/* 
+To avoid 4 implementations for 4 constant offset inputs, 
+the buffer is copied.
+
+Also, s_inc[25] may just be returned normally.
+*/
+
+inline fn keccak_inc_absorb_256_HMSG_CONST_INLEN(reg ptr u64[26] s_inc,
+                                                 reg ptr u8[HMSG_CONST_INLEN] m)
+-> reg ptr u64[26]
+{
+	inline int i;
+	inline int j;
+	inline int iterations;
+	inline int handled;
+	inline int remainder;
+
+	reg u8 t8;
+
+	reg u64 t64;
+
+	stack u8[200] t;
+
+	iterations = HMSG_CONST_INLEN / SHAKE256_RATE;
+	handled    = iterations * SHAKE256_RATE;
+	remainder  = HMSG_CONST_INLEN - handled;
+
+        /* Incremental, do not zero state (see fips202.c). */
+
+	for j = 0 to iterations {
+		for i = 0 to (SHAKE256_RATE / 8) {
+			t64 = load64(m[j * SHAKE256_RATE + 8 * i:8]);
+			s_inc[i] ^= t64;
+		}
+
+		s_inc[0:25] = KeccakF1600_StatePermute(s_inc[0:25]);
+	}
+
+	for i = 0 to SHAKE256_RATE {
+		t[i] = 0;
+	}
+
+	for i = 0 to remainder {
+		t8 = m[handled + i];
+		t[i] = t8;
+	}
+
+	/* Incremental, do not pad yet. */
+
+	for i = 0 to (SHAKE256_RATE / 8) {
+		t64 = load64(t[8 * i:8]);
+		s_inc[i] ^= t64;
+	}
+
+	s_inc[25] = HMSG_CONST_INLEN % SHAKE256_RATE;
+
+	return s_inc;
+}

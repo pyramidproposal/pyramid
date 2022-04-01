@@ -1,0 +1,94 @@
+require "crypto_hashblocks.jahh"
+
+/* Note: sha256.jahh includes u32[8] IV. */
+u8[32] iv = {
+  0x6a, 0x09, 0xe6, 0x67,
+  0xbb, 0x67, 0xae, 0x85,
+  0x3c, 0x6e, 0xf3, 0x72,
+  0xa5, 0x4f, 0xf5, 0x3a,
+  0x51, 0x0e, 0x52, 0x7f,
+  0x9b, 0x05, 0x68, 0x8c,
+  0x1f, 0x83, 0xd9, 0xab,
+  0x5b, 0xe0, 0xcd, 0x19
+};
+
+fn crypto_hash(reg ptr u8[32] out, reg u64 in, reg u64 inlen)
+-> reg ptr u8[32], reg u32
+{
+  inline int i;
+  reg u64 j;
+  reg u32 t32 inlen32;
+  reg u8 t8;
+  stack u8[32] h;
+  stack u8[128] padded;
+  reg u64 bits;
+  
+  stack u64 s_bits;
+  stack ptr u8[32] s_out;
+
+  bits = inlen;
+  bits <<= 3;
+
+  s_bits = bits;
+  s_out = out;
+
+  for i = 0 to 32 {
+    t8 = iv[i];
+    h[i] = t8;
+  }
+
+  /* c implementation discards inlen32. */
+  h, in, inlen32 = crypto_hashblocks(h, in, inlen);
+  inlen = (64u)inlen32;
+
+  j = 0;
+  while(j < inlen){
+    t8 = (u8)[in + j];
+    padded[(int) j] = t8;
+    j += 1;
+  }
+  padded[(int) inlen] = 0x80;
+
+  bits = s_bits;
+  if(inlen < 56){
+  
+    j = inlen;
+    j += 1;
+    while(j < 56){
+      padded[(int)j] = 0;
+      j += 1;
+    }
+
+    for i = 0 to 8 {
+      padded[63 - i] = bits;
+      bits >>= 8;
+    }
+    
+    h = crypto_hashblock(h, padded[0:64]);
+  } else {
+  
+    j = inlen;
+    j += 1;
+    while(j < 120){
+      padded[(int)j] = 0;
+      j += 1;
+    }
+
+    for i = 0 to 8 {
+      padded[127 - i] = bits;
+      bits >>= 8;
+    }
+    
+    h = crypto_hashblock(h, padded[0:64]);
+    h = crypto_hashblock(h, padded[64:64]);
+  }
+
+  out = s_out;
+  for i = 0 to 32 {
+    t8 = h[i];
+    out[i] = t8;
+  }
+  
+  t32 = 0;
+  return out, t32;
+}

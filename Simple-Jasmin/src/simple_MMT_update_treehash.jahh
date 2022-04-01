@@ -1,0 +1,152 @@
+require "pyramid_params.jahh"
+require "pyr_wots.jahh"
+require "pyr_thash_shake256.jahh"
+require "pyr_address.jahh"
+require "utils.jahh"
+require "simple_treehash.jahh"
+require "simple_MMT_state.jahh"
+require "simple_MMT_state_format.jahh"
+
+/* 
+    Simple uses an instanced version of the Treehash algorithm, 
+    which operates on a state with Treehash members. 
+    The Treehash members that update are selected at runtime.
+    
+    To preserve typing, we split up update_treehash into two functions, 
+    for states of size/structure BDS and MMT.
+*/
+
+
+/* Compute one leaf for the Treehash instance that operates on tree height target_height. 
+   The Treehash instance shares a stack which is accessed through state. 
+   State is an MMT state that operates on hypertree layer layer. */
+#[returnaddress="stack"]
+fn MMT_update_treehash(reg const ptr u8[PYR_N] sk_psd, reg u32 target_height,
+                       reg ptr u8[MMT_SIZE] state, reg u32 layer)
+-> reg ptr u8[MMT_SIZE] 
+{
+    reg u8 t8 size;
+    reg u64 t64;
+    stack u8[PYR_N] sda;
+    stack u8[2*PYR_N] current;
+    stack u32 [8] hashtree_addr;
+    reg u32 j idx_leaf final_height t tree_idx cont tree_height;
+    reg u64 idx_tree index;
+    
+    stack u32 s_j s_idx_leaf;
+    stack u64 s_index;
+
+    stack u32 s_target_height;
+    stack ptr u8[MMT_SIZE] s_state;
+    stack ptr u8[PYR_N] s_sk_psd;
+
+    /* sk_psd and target_height are RO; 
+       target height is the index of the Treehash instance that is updated. */
+    s_sk_psd = sk_psd;
+    s_target_height = target_height;
+    s_state = state;
+
+    /* Tree/leaf for the right node that we start combining from. */
+    index = (64u)target_height;
+    s_index = index;
+    idx_tree = MMT_th_get_idx(state, index);
+    idx_leaf = (32u)idx_tree;
+    idx_tree >>= PYR_TREE_HEIGHT;
+    idx_leaf &= (1 << PYR_TREE_HEIGHT) - 1;
+    s_idx_leaf = idx_leaf;
+
+    hashtree_addr = init_addr(hashtree_addr);
+    hashtree_addr = set_layer_addr(hashtree_addr, layer);
+    hashtree_addr = set_tree_addr(hashtree_addr, idx_tree);
+    hashtree_addr = set_type(hashtree_addr, PYR_ADDR_TYPE_HASHTREE);
+    hashtree_addr = set_tree_index(hashtree_addr, idx_leaf);
+
+    /* A copy like this is not required in C, but index is only known at runtime. */
+    sda = MMT_th_get_sda(sda, state, index);
+
+    /* Generate the idx_leafth leaf, which we combine from. */
+    t = 0; 
+    current[PYR_N:PYR_N], sda = treehash_comp(current[PYR_N:PYR_N], sda, sk_psd,
+                                    idx_leaf, t, hashtree_addr);
+
+    /* State is inactive during treehash_comp; revcover it and update sda. */
+    state = s_state;
+    index = s_index;
+    state = MMT_th_set_sda(state, sda, index);
+    s_state = state;
+
+    /* while (state->stack->size > 0 &&
+              state->stack->nodeheight[state->stack->size - 1] == j &&
+              j < target_height) */
+    j = 0;
+    while {
+        state = s_state;
+        size = MMT_st_get_size(state[MMT_STCK:MMT_ST_SIZE]);
+	if(size > 0){ /* state->stack->size > 0 */
+	
+	    index = (64u)size;
+	    index -= 1;
+	    t8 = MMT_st_get_height(state[MMT_STCK:MMT_ST_SIZE], index);
+	    tree_height = (32u)t8;
+	    if(tree_height == j) { /* state->stack->nodeheight[state->stack->size - 1] == j */
+		target_height = s_target_height;
+		
+		if(j < target_height) { /* j < target_height (short-circuit not required) */
+		    cont = 1;
+		} else {
+		    cont = 0;
+		}
+	    } else {
+	        cont = 0;
+	    }
+	} else {
+	    cont = 0;
+	}
+    } (cont == 1) {
+	s_j = j;
+
+	/* Pop the node of equal height off the stack and combine with it. */
+	tree_idx = s_idx_leaf;
+	tree_idx >>= j;
+	tree_idx >>= 1;
+	hashtree_addr = set_tree_height(hashtree_addr, j);
+	hashtree_addr = set_tree_index(hashtree_addr, tree_idx);
+
+	current[0:PYR_N], state[MMT_STCK:MMT_ST_SIZE] =
+	    MMT_stack_pop(current[0:PYR_N], state[MMT_STCK:MMT_ST_SIZE]);
+	s_state = state;
+
+        /* Load sk for public seed.*/
+	sk_psd = s_sk_psd;
+	current = thash2r(current, sk_psd, hashtree_addr);
+
+	j = s_j;
+	j += 1;
+    }
+
+    /* Finally, check whether the Treehash instance is finished, i.e. 
+       whether it has reached a node of height target_height. If so, put the result in node. */
+    final_height = j;
+    state = s_state;
+    target_height = s_target_height;    
+    index = (64u)target_height;
+
+    if(final_height < target_height){
+	t8 = (8u)final_height;
+        state[MMT_STCK:MMT_ST_SIZE] = MMT_stack_push(state[MMT_STCK:MMT_ST_SIZE],
+	                                             current[PYR_N:PYR_N], t8);
+        t64 = MMT_th_get_idx(state, index);
+	t64 += 1;
+	state = MMT_th_set_idx(state, t64, index);
+    } else {
+	state = MMT_th_set_fin(state, 1, index);
+	t64 = 0;
+	state = MMT_th_set_idx(state, t64, index);
+	/* C: if (layer == 0) to distinguish between BDS/MMT state cases. */
+	t8 = (8u)final_height;
+	state[MMT_STCK:MMT_ST_SIZE] = MMT_stack_push(state[MMT_STCK:MMT_ST_SIZE],
+	                                             current[PYR_N:PYR_N], t8);
+    }
+    
+    return state;
+}

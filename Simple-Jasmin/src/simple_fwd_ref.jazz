@@ -1,0 +1,45 @@
+require "pyramid_params.jahh"
+require "simple_fwd_ref.jahh"
+
+/* nr_apply is variable in c for reusability, but not required.  */
+export fn fwd_ref_jazz(reg u64 seedp, reg u64 pub_seedp, reg u64 start_addrp)
+{
+	inline int i s;
+
+	reg u8 a8;
+
+	reg u32 a32;
+
+	stack u8[PYR_N] seed pub_seed;
+
+	stack u32[8] start_addr;
+
+	stack u64 s_seedp;
+
+	for i = 0 to PYR_N {
+		a8 = (u8) [seedp + i];
+		seed[i] = a8;
+	}
+
+	for i = 0 to PYR_N {
+		a8 = (u8) [pub_seedp + i];
+		pub_seed[i] = a8;
+	}
+
+	for i = 0 to 8 {
+		a32 = (u32) [start_addrp + 4*i];
+		start_addr[i] = a32;
+	}
+
+	s_seedp = seedp;
+
+	s = (1 << (PYR_TREE_HEIGHT - 1));
+	seed = fwd_ref(seed, pub_seed, s, start_addr);
+
+	seedp = s_seedp;
+
+	for i = 0 to PYR_N {
+		a8 = seed[i];
+		(u8) [seedp + i] = a8;
+	}
+}

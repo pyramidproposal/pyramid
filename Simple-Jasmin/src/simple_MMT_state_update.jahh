@@ -1,0 +1,417 @@
+require "pyramid_params.jahh"
+require "pyr_address.jahh"
+require "utils.jahh"
+require "pyr_hash_shake256.jahh"
+require "simple_treehash.jahh"
+require "simple_MMT_state.jahh"
+require "simple_MMT_state_format.jahh"
+require "simple_MMT_update_treehash.jahh"
+require "pyr_compute_root.jahh"
+
+/* Push operation from the authentication path onto the MMT stack.*/
+inline fn MMT_stack_push_auth(reg ptr u8[MMT_ST_SIZE] stack_, reg const ptr u8[AUTH_BYTES] auth,
+                             reg u32 j)
+-> reg ptr u8[MMT_ST_SIZE]
+{
+    inline int i;
+    reg u8 size height a8;
+    reg u64 offset_src offset_dst offset;
+
+    /* Get the current size of the stack. */
+    size = MMT_st_get_size(stack_);
+
+    /* Copy node from the authentication path -> stack; both at a non-constant offset. */
+    offset_src = (64u)j;
+    offset_src *= PYR_N;
+    offset_dst = (64u)size;
+    offset_dst *= PYR_N;
+    for i = 0 to PYR_N {
+        a8 = auth[i + (int)offset_src];
+	stack_[(MMT_ST_NDE + i) + (int)offset_dst] = a8;
+    }
+
+    /* Set the height of the node that is pushed. */
+    height = (8u)j;
+    offset = (64u)size;
+    stack_ = MMT_st_set_height(stack_, height, offset);
+
+    /* Increment the stack size of the shared MMT stack. */
+    size += 1;
+    stack_ = MMT_st_set_size(stack_, size);
+
+    return stack_;
+}
+
+/* Pop operation into the authentication path from the MMT stack. */
+inline fn MMT_stack_pop_auth(reg ptr u8[AUTH_BYTES] auth, reg ptr u8[MMT_ST_SIZE] stack_,
+                             reg u32 j)
+-> reg ptr u8[AUTH_BYTES], reg ptr u8[MMT_ST_SIZE]
+{
+    inline int i;
+    reg u8 size height a8;
+    reg u64 offset_src offset_dst offset;
+    reg ptr u8[MMT_ST_NDE_SIZE] nodes;
+
+    /* Decrement the stack size of the shared MMT stack. */
+    size = MMT_st_get_size(stack_);
+    size -= 1;
+    stack_ = MMT_st_set_size(stack_, size);
+
+    /* Copy node from the stack -> authhentication path; both at a non-const offset. */
+    offset_src = (64u)size;
+    offset_src *= PYR_N;
+    offset_dst = (64u)j;
+    offset_dst *= PYR_N;
+    for i = 0 to PYR_N {
+    	a8 = stack_[(MMT_ST_NDE + i) + (int)offset_src];
+	auth[i + (int)offset_dst] = a8;
+    }
+
+    /* Clear the copied node in the stack. */
+    nodes = stack_[MMT_ST_NDE:MMT_ST_NDE_SIZE];
+    nodes = MMT_st_clr_N(nodes, offset_src);
+    stack_[MMT_ST_NDE:MMT_ST_NDE_SIZE] = nodes;
+
+    /* Clear the height field of the cleared stack node. */
+    height = 0;
+    offset = (64u)size;
+    stack_ = MMT_st_set_height(stack_, height, offset);
+
+    return auth, stack_;
+}
+
+/* Clear the index of the jth Treehash instance in the MMT state. */
+inline fn MMT_th_clear_idx(reg ptr u8[MMT_SIZE] state, reg u64 j)
+-> reg ptr u8[MMT_SIZE]
+{
+    inline int i;
+    reg u64 offset;
+    
+    offset = j;
+    offset *= PYR_N;
+    for i = 0 to PYR_IDX_BYTES {
+    	state[(MMT_TREE + MMT_TH_IDX + i) + (int)offset] = 0;
+    }
+    
+    return state;
+}
+
+/* The maximum "idx_sig" index that can be reached on layer. */
+inline fn mli(reg u32 layer) -> reg u64 {
+    reg u32 sh tmp32;
+    reg u64 tmp64;
+
+    tmp32 = layer;
+    tmp32 *= PYR_TREE_HEIGHT;
+    sh = PYR_FULL_HEIGHT;
+    sh -= tmp32;
+    tmp64 = 1;
+    tmp64 <<= sh;
+
+    return tmp64;
+}
+
+/* Updates a ghost instance of Treehash. Opt to reuse variables from MMT_state_update
+   to increase readability.*/
+inline fn update_ghost_instance(reg ptr u8[MMT_SIZE] state, reg u64 idx64,
+                                reg u32 idx_leaf, reg u64 index)
+-> reg ptr u8[MMT_SIZE]
+{
+    stack u8[PYR_N] zero;
+    reg u8 t8;
+    reg u32 i idx32 tmp32 taui tree_idx;
+    
+    zero = zero_N(zero);
+
+    idx32 = (32u)idx64;
+    idx32 &= (1 << PYR_TREE_HEIGHT) - 1;
+		    
+    /* You should not need the mask here, so nto should also suffice. */
+    taui = get_tau(idx32);
+
+    /* Simulate popping previous nodes for combining. */
+    i = 0;
+    while(i < taui){
+        zero, state[MMT_STCK:MMT_ST_SIZE] =
+	    MMT_stack_pop(zero, state[MMT_STCK:MMT_ST_SIZE]);
+	i += 1;
+    }
+
+    /* Simulate pushing the result. 
+       Check if the result would have been auth path node. 
+       ((tree_idx >> taui) ^ 1) =?= (idx_leaf >> taui) */
+    tree_idx = idx32;
+    tree_idx >>= taui;
+    tree_idx ^= 1;
+    tmp32 = idx_leaf;
+    tmp32 >>= taui;
+    if(tree_idx == tmp32){
+        state[MMT_STCK:MMT_ST_SIZE] = MMT_stack_push_auth(
+	    state[MMT_STCK:MMT_ST_SIZE], state[MMT_AUTH:AUTH_BYTES], taui);
+    } else {
+        /* If we did not push a relevant node, fake one. */
+        t8 = (8u)taui;
+        state[MMT_STCK:MMT_ST_SIZE] = MMT_stack_push(state[MMT_STCK:MMT_ST_SIZE],
+	                                             zero, t8);
+    }
+
+    idx64 += 1;
+    state = MMT_th_set_idx(state, idx64, index);
+
+    return state;
+}
+
+/* Forwards the FSG references in an MMT state. Opt to reuse variables from MMT_state_update
+   to increase readability; idx_leaf can be derived from idx_sig. */
+inline fn MMT_fwd_refs(reg ptr u8[MMT_SIZE] state, reg const ptr u8[PYR_SK_CORE_BYTES] sk,
+                       stack u64 s_idx_sig, stack u32 s_idx_leaf, stack u32 s_layer)
+-> reg ptr u8[MMT_SIZE]
+{
+    inline int i offset;
+    stack u32[8] th_ref_addr;
+    reg u8 fin t8;
+    reg u32 th_ref_idx_leaf tmp32 layer;
+    reg u64 th_ref_idx th_ref_idx_tree max_layer_idx;
+    
+    stack const ptr u8[PYR_SK_CORE_BYTES] s_sk;
+
+    /* RO spill */
+    s_sk = sk;
+
+    /* If so, forward the references such that they remain at a fixed distance. 
+       This is an example of a for loop that should not be unrolled; 
+       we use a for loop solely for the compile time offset. */
+    layer = s_layer;
+    th_ref_addr = set_layer_addr(th_ref_addr, layer);
+    for i = 0 to PYR_TREE_HEIGHT {
+
+        th_ref_idx = s_idx_sig;
+        th_ref_idx += 1 + (1 << i);
+
+        /* Forward those references that are not advanced past the fixed distance. 
+	   (((idx_leaf + 1) >> i) & 1) =?= 1 */
+	tmp32 = s_idx_leaf;
+	tmp32 += 1;
+	tmp32 >>= i;
+	tmp32 &= 1;
+	if(tmp32 == 1){
+            layer = s_layer;
+            max_layer_idx = mli(layer);
+            if(th_ref_idx < max_layer_idx){
+		
+                th_ref_idx_tree = th_ref_idx;
+ 		th_ref_idx_tree >>= PYR_TREE_HEIGHT;
+		th_ref_idx_leaf = th_ref_idx;
+		th_ref_idx_leaf &= (1 << PYR_TREE_HEIGHT) - 1;
+
+     	        th_ref_addr = set_tree_addr(th_ref_addr, th_ref_idx_tree);
+	        th_ref_addr = set_keypair_addr(th_ref_addr, th_ref_idx_leaf);
+
+	        offset = MMT_TREE + MMT_TH_SDA + i * PYR_N;
+
+	        sk = s_sk;
+      	        state[offset:PYR_N] = fsg_1_comp(state[offset:PYR_N], sk[SK_PSD:PYR_N],
+	                                         th_ref_addr);
+	    }
+	}
+    }
+    
+    return state;
+}
+
+
+#[returnaddress="stack"]
+fn MMT_state_update(reg ptr u8[MMT_SIZE] state, reg const ptr u8[PYR_SK_CORE_BYTES] sk,
+                    reg u32 layer)
+-> reg ptr u8[MMT_SIZE]
+{
+    stack u32[8] addr;
+    stack u8[PYR_N] sk_ssd tmp;
+    reg u8 fin;
+    reg u32 i j n idx_leaf tau1 tau2 tmp32;
+    reg u64 idx_next idx_sig planned_idx max_layer_idx;
+    reg u64 idx_tree prev_layer tmp64 index mask idx64 tmp64;
+
+    stack u32 s_idx_leaf;
+    stack u64 s_idx_sig s_index;
+    
+    stack u32 s_layer;
+
+    /* RO parameter spills. state is operated on in all hash calls, 
+       therefore never requiring a spill. */
+    s_layer = layer;
+
+    /* addr = {0} */
+    addr = init_addr(addr);
+
+    /* Layer is only known at runtime; we require the reference for this layer. */
+    sk_ssd = SK_get_ssd(sk_ssd, sk, layer);
+
+    /* Initialize indices:
+       idx_leaf < 2^(h/d): all leaves in the tree that we are in;
+       idx_next <= 2^(h): all leaves on hypertree layer 0;
+       idx_sig < 2^(h - layer * (h/d)): all leaves from all trees on this hypertree layer. */
+    idx_sig = btou64_idx(sk[SK_IDX:PYR_IDX_BYTES]);
+    idx_next = idx_sig;
+    idx_next += 1;
+    tmp32 = layer;
+    tmp32 *= PYR_TREE_HEIGHT;
+    idx_sig >>= tmp32;
+    idx_leaf = idx_sig;
+    idx_leaf &= (1 << PYR_TREE_HEIGHT) - 1;
+
+    /* RO variables. */
+    s_idx_sig = idx_sig;
+
+    /* Prepare addr. */    
+    idx_tree = idx_sig;
+    idx_tree >>= PYR_TREE_HEIGHT;
+    addr = set_layer_addr(addr, layer);
+    addr = set_tree_addr(addr, idx_tree);
+    addr = set_keypair_addr(addr, idx_leaf);
+
+    /* Check: do we hop to the next leaf node in this iteration? 
+       (idx_next & ((1 << (layer * PYR_TREE_HEIGHT)) - 1)) =?= 0 */
+    prev_layer = 1;
+    prev_layer <<= tmp32; /* (layer * PYR_TREE_HEIGHT) */
+    prev_layer -= 1;
+    prev_layer &= idx_next;
+    if(prev_layer == 0){
+
+    	/* RO */
+        s_idx_leaf = idx_leaf;
+
+        /* If so, forward the references such that they remain at a fixed distance. */
+	state = MMT_fwd_refs(state, sk, s_idx_sig, s_idx_leaf, s_layer);
+
+	/* Update the authentication path, as we are hopping to the next leaf node.
+           This is an example of short-circuiting not being required. */	   
+        /* i < (tau1 + 1) && i < PYR_TREE_HEIGHT */
+	idx_leaf = s_idx_leaf;
+	tau1 = get_tau(idx_leaf);
+	i = 0;
+	n = tau1;
+	n += 1;
+	while{
+	    if(i == PYR_TREE_HEIGHT){
+		i = n; /* end loop */
+	    }
+	}(i < n){
+            state[MMT_AUTH:AUTH_BYTES], state[MMT_STCK:MMT_ST_SIZE] =
+		MMT_stack_pop_auth(state[MMT_AUTH:AUTH_BYTES],
+		                   state[MMT_STCK:MMT_ST_SIZE], i);
+	    i += 1;
+	}
+
+	/* Schedule changes to the authentication path, as we have consumed the result on stack. */
+	tmp32 = idx_leaf;
+	tmp32 += 1;
+	tau2 = get_tau(tmp32);
+
+	/* i < (tau2 + 1) && i < PYR_TREE_HEIGHT */
+	tmp64 = 1;
+	i = 0;
+	n = tau2;
+	n += 1;
+	while {
+	    if(i == PYR_TREE_HEIGHT){
+		i = n; /* end loop */
+	    }
+	} (i < n) {
+	    /* Schedule one left node; in FS-Simple this leads to a ghost Treehash instance. */
+	    if(i == tau2){
+	    	idx_sig = s_idx_sig;
+		planned_idx = idx_sig;
+		planned_idx += 2;
+		planned_idx -= tmp64;
+		index = (64u)i;
+		state = MMT_th_set_idx(state, planned_idx, index);
+		state = MMT_th_set_fin(state, 0, index);
+	    } else { /* Schedule 0+ right nodes. */
+	        idx_sig = s_idx_sig;
+		planned_idx = idx_sig;
+		planned_idx += 2;
+		planned_idx += tmp64;
+		layer = s_layer;
+		max_layer_idx = mli(layer);
+		if(planned_idx < max_layer_idx){
+		    index = (64u)i;
+		    state = MMT_th_set_idx(state, planned_idx, index);
+		    state = MMT_th_set_fin(state, 0, index);
+		}
+	    }
+
+	    tmp64 <<= 1;
+	    i += 1;
+	}
+	
+    } else { /* else if */
+
+        /* Notice that no hashing operations have taken place yet if this branch is taken. */
+	/* (idx_next & ((1 << (layer - 1) * PYR_TREE_HEIGHT) - 1)) =?= 0 */
+	mask = 1;
+	tmp32 -= PYR_TREE_HEIGHT; /* (layer * PYR_TREE_HEIGHT) - PYR_TREE_HEIGHT */
+	mask <<= tmp32;
+	mask -= 1;
+	tmp64 = idx_next;
+	tmp64 &= mask;
+	if(tmp64 == 0){
+
+            /* while (j > 0 && (state->treehash + j - 1)->fin == 1) */
+	    j = PYR_TREE_HEIGHT;
+	    while {
+		if(j > 0){
+		    index = (64u)j;
+		    index -= 1;
+		    fin = MMT_th_get_fin(state, index);
+		} else {
+		    fin =  0; /* end loop */
+		}
+	    } (fin == 1) {
+		j -= 1;
+	    }
+
+	    if(j > 0){
+		i = j - 1;
+
+		/* index identifies the TH instance that we update */
+		index = (64u)i;
+		
+		/* idx64 is the index that the TH instance is currently tasked to generate. */
+		idx64 = MMT_th_get_idx(state, index);
+
+		/* Check if this is a ghost TH instance, which we supply with an auth value
+                   OR a zero-string when it is trying to generate left nodes. */
+		if(idx64 < idx_sig){
+		    state = update_ghost_instance(state, idx64, idx_leaf, index);
+		} else { /* else if */
+		    /* Check if this is a ghost TH instance, which we perform one "real" treehash
+                       update for, when it tries to generate exactly the leaf that we are at. */
+		    if (idx64 == idx_sig){
+
+		        /* We omit one optimization here: one could generate auth[0] from the WOTS
+	                   signature, for ~1/2 the calls to F. This is also left out in the C 
+                           implementation. */
+		        s_index = index;
+
+		        tmp = MMT_th_get_sda(tmp, state, index);
+		        state = MMT_th_set_sda(state, sk_ssd, index);
+
+		        layer = s_layer;
+		        state = MMT_update_treehash(sk[SK_PSD:PYR_N], i, state, layer);
+
+			index = s_index;
+		        state = MMT_th_set_sda(state, tmp, index);
+
+                    /* Otherwise, this is a right node that we update like regular MMT. */
+		    } else {
+		        layer = s_layer;
+		        state = MMT_update_treehash(sk[SK_PSD:PYR_N], i, state, layer);
+		    }
+		}
+	    }
+	}
+    }
+    
+    return state;
+}

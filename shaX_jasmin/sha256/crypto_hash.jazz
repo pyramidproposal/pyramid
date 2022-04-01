@@ -1,0 +1,28 @@
+require "crypto_hash.jahh"
+
+export fn crypto_hash_jazz(reg u64 outp, reg u64 inp, reg u64 inlen)
+-> reg u32
+{
+  inline int i;
+
+  stack u8[32] out;
+
+  stack u64 s_outp;
+
+  reg u8 t8;
+
+  reg u32 t32;
+
+  s_outp = outp;
+
+  out, t32 = crypto_hash(out, inp, inlen);
+
+  outp = s_outp;
+
+  for i = 0 to 32 {
+    t8 = out[i];
+    (u8)[outp + i] = t8;
+  }
+
+  return t32;
+}

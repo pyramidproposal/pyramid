@@ -1,0 +1,58 @@
+require "pyramid_params.jahh"
+require "simple_treehash.jahh"
+require "ABI_unpack.jahh"
+
+/* Other contains s & t due to ABI limits: 
+   other = 32u s || 32u t
+ */
+export fn treehash_jazz(reg u64 rootp, reg u64 next_seedp, reg u64 sk_ssdp,
+                        reg u64 sk_psdp, reg u64 subtree_addrp, reg u64 otherp)
+{
+	inline int i;
+
+	reg u8 a8;
+
+	reg u32 a32 s t;
+
+	stack u8[PYR_N] root next_seed sk_ssd sk_psd;
+
+	stack u32[8] subtree_addr;
+
+	stack u64 s_rootp, s_next_seedp;
+
+	for i = 0 to PYR_N {
+		a8 = (u8) [sk_ssdp + i];
+		sk_ssd[i] = a8;
+	}
+
+	for i = 0 to PYR_N {
+		a8 = (u8) [sk_psdp + i];
+		sk_psd[i] = a8;
+	}
+
+	for i = 0 to 8 {
+		a32 = (u32) [subtree_addrp + 4*i];
+		subtree_addr[i] = a32;
+	}
+
+	s, t = get_other(s, t, otherp);
+
+	s_rootp = rootp;
+	s_next_seedp = next_seedp;
+
+	root, next_seed = treehash(root, next_seed, sk_ssd, sk_psd,
+	                               s, t, subtree_addr);
+			    
+	rootp = s_rootp;
+	next_seedp = s_next_seedp;
+
+	for i = 0 to PYR_N {
+		a8 = root[i];
+		(u8) [rootp + i] = a8;
+	}
+
+	for i = 0 to PYR_N {
+		a8 = next_seed[i];
+		(u8) [next_seedp + i] = a8;
+	}
+}

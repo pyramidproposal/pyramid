@@ -1,0 +1,103 @@
+require "pyramid_params.jahh"
+require "pyr_address.jahh"
+require "pyr_wots.jahh"
+require "pyr_compute_root.jahh"
+require "pyr_thash_shake256.jahh"
+require "utils.jahh"
+
+/* 
+    Verifies a detached signature and message under a given public key. 
+    The signature is NOT overwritten when verification fails.
+*/
+inline fn crypto_sign_verify(stack u8[PYR_BYTES] sig, reg u64 siglen, reg u64 m,
+                             reg u64 mlen, stack u8[PYR_PK_BYTES] pk)
+-> reg u32
+{
+    inline int i sig_offset;
+    reg bool root_valid;
+    reg u32 idx_leaf tree_height res;
+    reg u64 idx idx_tree;
+    
+    stack u8[PYR_WOTS_BYTES] wots_pk;
+    stack u8[PYR_N] leaf root;
+    stack u32[8] hmsg_addr wots_addr wotspk_addr hashtree_addr;
+
+    stack u64 s_idx_tree;
+
+    /* Initialize addresses for h_msg and the three thash types. */
+    hmsg_addr = init_addr(wots_addr);
+    wots_addr = init_addr(wots_addr);
+    wotspk_addr = init_addr(wotspk_addr);
+    hashtree_addr = init_addr(hashtree_addr);
+
+    hmsg_addr = set_type(hmsg_addr, PYR_ADDR_TYPE_HMSG);
+    wots_addr = set_type(wots_addr, PYR_ADDR_TYPE_WOTS);
+    wotspk_addr = set_type(wotspk_addr, PYR_ADDR_TYPE_WOTSPK);
+    hashtree_addr = set_type(hashtree_addr, PYR_ADDR_TYPE_HASHTREE);
+
+    /* Ensure that the signature is of the expected length before reading from it. */
+    if(siglen != PYR_BYTES){
+        res = -1; 
+    } else {
+        /* Obtain the index from the signature.  */
+        idx = btou64_idx(sig[SIG_IDX:PYR_IDX_BYTES]);
+        s_idx_tree = idx;
+
+	/* Iterate over d interwoven WOTS signatures and authentication paths, 
+           i.e. one for every hypertree layer. */
+        for i = 0 to PYR_D {
+	    /* Compute the tree index and the leaf index on hypertree layer i. */
+            idx_tree = s_idx_tree;
+            idx_leaf = idx_tree;
+	    idx_leaf &= (1 << PYR_TREE_HEIGHT) - 1;
+	    idx_tree >>= PYR_TREE_HEIGHT;
+	    s_idx_tree = idx_tree;
+
+	    /* Prepare the thash addresses for layer i. */
+	    wots_addr = set_layer_addr_(wots_addr, i);
+            wotspk_addr = set_layer_addr_(wotspk_addr, i);
+            hashtree_addr = set_layer_addr_(hashtree_addr, i);
+
+	    wots_addr = set_tree_addr(wots_addr, idx_tree);
+            wotspk_addr = set_tree_addr(wotspk_addr, idx_tree);
+            hashtree_addr = set_tree_addr(hashtree_addr, idx_tree);
+
+	    wots_addr = set_keypair_addr(wots_addr, idx_leaf);
+	    wotspk_addr = set_keypair_addr(wotspk_addr, idx_leaf);
+
+	    /* On hypertree layer 0, WOTS signs a message digest. */
+	    if(i == 0){
+	        /* Compute the randomized message digest. */
+	        hmsg_addr = copy_keypair_addr(hmsg_addr, wots_addr);
+	        root = h_msg(root, sig[SIG_RND:PYR_N], pk[PK_RT:PYR_N], hmsg_addr, m, mlen);
+	        sig_offset = SIG_HTS;
+	    }
+
+	    /* Forward the WOTS signature elements to reach the supposed F^(w-1) applications. 
+               The number of remaining applications of F depends on root. */
+	    wots_pk, wots_addr = wots_pk_from_sig(wots_pk, sig[sig_offset:PYR_WOTS_BYTES], root,
+	                                          pk[PK_SD:PYR_N], wots_addr);
+	    sig_offset += PYR_WOTS_BYTES;
+
+	    /* Compress the purported WOTS public key, which acts as a leaf node. */
+	    leaf = thashLEN(leaf, wots_pk, pk[PK_SD:PYR_N], wotspk_addr);
+	
+	    /* Combine the leaf node with the authentication path from the signature. */
+  	    tree_height = PYR_TREE_HEIGHT;
+ 	    root = compute_root(root, leaf, sig[sig_offset:AUTH_BYTES], pk[PK_SD:PYR_N],
+	                        idx_leaf, tree_height, hashtree_addr);
+	    sig_offset += AUTH_BYTES;
+        }
+
+	/* The signature is valid when the computed root equals the root in pk. */
+        root_valid = eq_N(root, pk[PK_RT:PYR_N]);
+
+        if(root_valid){
+      	  res = 0;
+        } else {
+          res = -1;
+        }
+    }
+    
+    return res;
+}

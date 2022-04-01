@@ -1,0 +1,45 @@
+#ifndef PYR_BDS_STATE_FORMAT_H
+#define PYR_BDS_STATE_FORMAT_H
+
+#include "params.h"
+
+/* BDS Treehash instance */
+/* Size */
+#define BDS_TH_NDE_SIZE (PYR_TREE_HEIGHT * PYR_N)
+#define BDS_TH_FIN_SIZE (PYR_TREE_HEIGHT * 1)
+#define BDS_TH_IDX_SIZE (PYR_TREE_HEIGHT * PYR_IDX_BYTES)
+#define BDS_TH_SDA_SIZE (PYR_TREE_HEIGHT * PYR_N)
+#define BDS_TH_SDN_SIZE (PYR_TREE_HEIGHT * PYR_N)
+/* Offset */
+#define BDS_TH_NDE 0
+#define BDS_TH_FIN (BDS_TH_NDE + BDS_TH_NDE_SIZE)
+#define BDS_TH_IDX (BDS_TH_FIN + BDS_TH_FIN_SIZE)
+#define BDS_TH_SDA (BDS_TH_IDX + BDS_TH_IDX_SIZE)
+#define BDS_TH_SDN (BDS_TH_SDA + BDS_TH_SDA_SIZE)
+#define BDS_TH_SIZE (BDS_TH_SDN + BDS_TH_SDN_SIZE)
+
+/* BDS Stack */
+/* Size */
+#define BDS_ST_SZE_SIZE 1
+#define BDS_ST_NDE_SIZE ((PYR_TREE_HEIGHT - 1) * PYR_N)
+#define BDS_ST_HGT_SIZE (PYR_TREE_HEIGHT - 1)
+/* Offset */
+#define BDS_ST_SZE 0
+#define BDS_ST_NDE (BDS_ST_SZE + BDS_ST_SZE_SIZE)
+#define BDS_ST_HGT (BDS_ST_NDE + BDS_ST_NDE_SIZE)
+#define BDS_ST_SIZE (BDS_ST_HGT + BDS_ST_HGT_SIZE)
+
+/* BDS State */
+/* Size */
+#define BDS_AUTH_SIZE (PYR_TREE_HEIGHT * PYR_N)
+#define BDS_STCK_SIZE BDS_ST_SIZE
+#define BDS_TREE_SIZE BDS_TH_SIZE
+#define BDS_KEEP_SIZE ((PYR_TREE_HEIGHT / 2) * PYR_N)
+/* Offset */
+#define BDS_AUTH 0
+#define BDS_STCK (BDS_AUTH + BDS_AUTH_SIZE)
+#define BDS_TREE (BDS_STCK + BDS_STCK_SIZE)
+#define BDS_KEEP (BDS_TREE + BDS_TREE_SIZE)
+#define BDS_SIZE (BDS_KEEP + BDS_KEEP_SIZE)
+
+#endif

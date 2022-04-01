@@ -1,0 +1,249 @@
+require "pyramid_params.jahh"
+require "utils.jahh"
+require "simple_MMT_state_utils.jahh"
+require "simple_MMT_state_format.jahh"
+
+/* 
+   Treehash GET/SET
+*/
+
+/* Load fin from the ith treehash instance of state.  */
+inline fn MMT_th_get_fin(reg ptr u8[MMT_SIZE] state, reg u64 i)
+-> reg u8
+{
+    reg u64 offset;
+    reg u8 fin;
+    offset = MMT_TREE + MMT_TH_FIN;
+    /* fins are boolean, 1 byte each */
+    offset += i;
+    fin = state[(int)offset];
+    return fin;
+}
+
+/* Load idx from the ith treehash instance of state.  */
+inline fn MMT_th_get_idx(reg ptr u8[MMT_SIZE] state, reg u64 i)
+-> reg u64
+{
+    reg u64 offset j;
+    reg u64 idx;
+    offset = MMT_TREE + MMT_TH_IDX;
+    j = i;
+    j *= PYR_IDX_BYTES;
+    offset += j;
+    idx = MMT_btou64_idx(state, offset);
+    return idx;
+}
+
+/* Copy seed active from the ith treehash instance of state into sda.  */
+inline fn MMT_th_get_sda(reg ptr u8[PYR_N] sda, reg ptr u8[MMT_SIZE] state, reg u64 i)
+-> reg ptr u8[PYR_N]
+{
+    reg u64 offset j;
+    offset = MMT_TREE + MMT_TH_SDA;
+    j = i;
+    j *= PYR_N;
+    offset += j;
+    sda = MMT_cpy_N(sda, state, offset);
+    return sda;
+}
+
+/* Overwrite fin in the ith treehash instance of state. */
+inline fn MMT_th_set_fin(reg ptr u8[MMT_SIZE] state, inline int fin, reg u64 i)
+-> reg ptr u8[MMT_SIZE]
+{
+    reg u64 offset;
+    offset = MMT_TREE + MMT_TH_FIN;
+    /* fins are boolean, 1 byte each */
+    offset += i;
+    state[(int)offset] = fin;
+    return state;
+}
+
+/* Overwrite idx in the ith treehash instance of state.  */
+inline fn MMT_th_set_idx(reg ptr u8[MMT_SIZE] state, reg u64 idx, reg u64 i)
+-> reg ptr u8[MMT_SIZE]
+{
+    reg u64 offset j;
+    offset = MMT_TREE + MMT_TH_IDX;
+    j = i;
+    j *= PYR_IDX_BYTES;
+    offset += j;
+    state = MMT_u64tob_idx(state, idx, offset);
+    return state;
+}
+
+/* Copy seed active from node to the ith treehash instance of state.  */
+inline fn MMT_th_set_sda(reg ptr u8[MMT_SIZE] state, reg ptr u8[PYR_N] node, reg u64 i)
+-> reg ptr u8[MMT_SIZE]
+{
+    reg u64 offset j;
+    offset = MMT_TREE + MMT_TH_SDA;
+    j = i;
+    j *= PYR_N;
+    offset += j;
+    state = MMT_set_N(state, node, offset);
+    return state;
+}
+
+/* 
+   Stack GET/SET
+*/
+
+/* Load the stack size. */
+inline fn MMT_st_get_size(reg ptr u8[MMT_ST_SIZE] stack_)
+-> reg u8
+{
+    reg u8 size;
+    size = stack_[MMT_ST_SZE];
+    return size;
+}
+
+/* Load the height of the ith node on the stack. */
+inline fn MMT_st_get_height(reg ptr u8[MMT_ST_SIZE] stack_, reg u64 i)
+-> reg u8
+{
+    reg u8 height;
+    /* heights are 1 byte each */
+    height = stack_[MMT_ST_HGT + (int)i];
+    return height;
+}
+
+/* Store the stack size. */
+inline fn MMT_st_set_size(reg ptr u8[MMT_ST_SIZE] stack_, reg u8 size)
+-> reg ptr u8[MMT_ST_SIZE]
+{
+    stack_[MMT_ST_SZE] = size;
+    return stack_;
+}
+
+/* Store the height of the ith node on the stack. */
+inline fn MMT_st_set_height(reg ptr u8[MMT_ST_SIZE] stack_, reg u8 height, reg u64 i)
+-> reg ptr u8[MMT_ST_SIZE]
+{
+    /* heights are 1 byte each */
+    stack_[MMT_ST_HGT + (int)i] = height;
+    return stack_;
+}
+
+/* 
+   Stack POP/PUSH
+*/
+
+/* Pop operation. */
+inline fn MMT_stack_pop(reg ptr u8[PYR_N] pop_node, reg ptr u8[MMT_ST_SIZE] stack_)
+-> reg ptr u8[PYR_N], reg ptr u8[MMT_ST_SIZE]
+{
+    reg u8 size;
+    reg ptr u8[MMT_ST_NDE_SIZE] nodes;
+    reg u64 offset;
+
+    /* Decrement size */
+    size = MMT_st_get_size(stack_);
+    size -= 1;
+    stack_ = MMT_st_set_size(stack_, size);
+
+    /* Copy node into pop_node */
+    nodes = stack_[MMT_ST_NDE:MMT_ST_NDE_SIZE];
+    offset = (64u)size;
+    offset *= PYR_N;
+    pop_node = MMT_st_get_N(pop_node, nodes, offset);
+
+    /* Clear the stack copy (could be skipped). */
+    nodes = MMT_st_clr_N(nodes, offset);
+    stack_[MMT_ST_NDE:MMT_ST_NDE_SIZE] = nodes;
+
+    /* Clear the node height. */
+    offset = (64u)size;
+    stack_[MMT_ST_HGT + (int)offset] = 0;
+
+    return pop_node, stack_;
+}
+
+/* Push operation. */
+inline fn MMT_stack_push(reg ptr u8[MMT_ST_SIZE] stack_, reg ptr u8[PYR_N] push_node,
+       	  		 reg u8 push_nodeheight)
+-> reg ptr u8[MMT_ST_SIZE]
+{
+    reg u8 size;
+    reg ptr u8[MMT_ST_NDE_SIZE] nodes;
+    reg u64 offset;
+
+    /* Get size */
+    size = MMT_st_get_size(stack_);
+
+    /* Copy push_node into stack */
+    nodes = stack_[MMT_ST_NDE:MMT_ST_NDE_SIZE];
+    offset = (64u)size;
+    offset *= PYR_N;
+    nodes = MMT_st_set_N(nodes, push_node, offset);
+    stack_[MMT_ST_NDE:MMT_ST_NDE_SIZE] = nodes;
+
+    /* Set node height. */
+    offset = (64u)size;
+    stack_ = MMT_st_set_height(stack_, push_nodeheight, offset);
+
+    /* Increment stack size. */
+    size += 1;
+    stack_ = MMT_st_set_size(stack_, size);
+
+    return stack_;
+}
+
+/* 
+   Authentication path GET/SET
+*/
+
+/* (Unused) Copy the ith node in authentication path of state into node.  */
+inline fn MMT_get_auth_node(reg ptr u8[PYR_N] node, reg ptr u8[MMT_SIZE] state, reg u64 i)
+-> reg ptr u8[PYR_N]
+{
+    reg u64 offset j;
+    offset = MMT_AUTH;
+    j = i;
+    j *= PYR_N;
+    offset += j;
+    node = MMT_cpy_N(node, state, offset);
+
+    return node;
+}
+
+/* Overwrite the ith node in authentication path of state. */
+inline fn MMT_set_auth_node(reg ptr u8[MMT_SIZE] state, reg ptr u8[PYR_N] node, reg u64 i)
+-> reg ptr u8[MMT_SIZE]
+{
+    reg u64 offset j;
+    offset = MMT_AUTH;
+    j = i;
+    j *= PYR_N;
+    offset += j;
+    state = MMT_set_N(state, node, offset);
+
+    return state;
+}
+
+/* 
+   Initialization.
+*/
+
+/* Initialize the stack of a MMT state. */
+inline fn MMT_init_stack(reg ptr u8[MMT_ST_SIZE] stack_)
+-> reg ptr u8[MMT_ST_SIZE]
+{
+    inline int i offset;
+    reg u8 size;
+
+    size = 0;
+    stack_ = MMT_st_set_size(stack_, size);
+
+    offset = MMT_ST_NDE;
+    for i = 0 to MMT_ST_NDE_SIZE {
+    	stack_[offset + i] = 0;
+    }
+
+    offset = MMT_ST_HGT;
+    for i = 0 to MMT_ST_HGT_SIZE {
+    	stack_[offset + i] = 0;
+    }
+
+    return stack_;
+}

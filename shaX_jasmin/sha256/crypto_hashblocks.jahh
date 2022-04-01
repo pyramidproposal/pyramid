@@ -1,0 +1,83 @@
+require "sha256.jahh"
+require "bigendian_32.jahh"
+
+inline fn crypto_hashblocks(reg ptr u8[32] statebytes, reg u64 in, reg u64 inlen)
+-> reg ptr u8[32], reg u64, reg u32
+{
+  inline int i;
+  reg u32 t32;
+  reg u64 t64;
+  stack u32[8] state;
+  stack u32[16] w;
+  
+  stack u64 s_in s_inlen;
+  stack ptr u8[32] s_statebytes;
+
+  for i = 0 to 8 {
+    t32 = load32(statebytes[4*i:4]);
+    state[i] = t32;
+  }
+  s_statebytes = statebytes;
+    
+
+  while(inlen >= 64){
+    t64 = in;
+    for i = 0 to 16 {
+      t32 = load32_in(t64);
+      w[i] = t32;
+      t64 += 4;
+    }
+
+    s_in = in;
+    s_inlen = inlen; /* required for crypto_hash */
+    state = iterate_hash(w, state);
+    in = s_in;
+    inlen = s_inlen;
+
+    in += 64;
+    inlen -= 64;      
+  }
+    
+  statebytes = s_statebytes;
+  for i = 0 to 8 {
+    t32 = state[i];
+    statebytes[4*i:4] = store32(statebytes[4*i:4], t32);
+  }
+
+  t32 = (32u)inlen;
+  return statebytes, in, t32;
+}
+
+/* For hashing the final 64-byte buffer(s). */
+inline fn crypto_hashblock(reg ptr u8[32] statebytes, reg const ptr u8[64] in)
+-> reg ptr u8[32]
+{
+  inline int i;
+  reg u32 t32;
+  stack u32[8] state;
+  stack u32[16] w;
+  
+  stack u64 s_in;
+  stack ptr u8[32] s_statebytes;
+
+  for i = 0 to 8 {
+    t32 = load32(statebytes[4*i:4]);
+    state[i] = t32;
+  }
+  s_statebytes = statebytes;
+
+
+  for i = 0 to 16 {
+    t32 = load32(in[4*i:4]);
+    w[i] = t32;
+  }
+  state = iterate_hash(w, state);
+    
+  statebytes = s_statebytes;
+  for i = 0 to 8 {
+    t32 = state[i];
+    statebytes[4*i:4] = store32(statebytes[4*i:4], t32);
+  }
+
+  return statebytes;
+}

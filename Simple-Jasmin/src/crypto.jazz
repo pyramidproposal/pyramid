@@ -1,0 +1,130 @@
+require "pyramid_params.jahh"
+require "crypto_sign_seed_keypair.jahh"
+require "crypto_sign_signature.jahh"
+require "crypto_sign_verify.jahh"
+
+export fn crypto_sign_seed_keypair_jazz(reg u64 pkp, reg u64 skp, reg u64 seedp)
+-> reg u32
+{
+	inline int i;
+
+	reg u8 a8;
+
+	stack u8[CRYPTO_SEEDBYTES] seed;
+
+	stack u8[PYR_PK_BYTES] pk;
+
+	stack u8[PYR_SK_BYTES] sk;
+
+	stack u64 s_pkp s_skp;
+
+	reg u32 retval;
+
+	for i = 0 to CRYPTO_SEEDBYTES {
+		a8 = (u8) [seedp + i];
+		seed[i] = a8;
+	}
+
+	s_pkp = pkp;
+	s_skp = skp;
+
+	retval, pk, sk = crypto_sign_seed_keypair(pk, sk, seed);
+
+	pkp = s_pkp;
+	skp = s_skp;
+
+	for i = 0 to PYR_PK_BYTES {
+		a8 = pk[i];
+		(u8) [pkp + i] = a8;
+	}
+
+	for i = 0 to PYR_SK_BYTES {
+		a8 = sk[i];
+		(u8) [skp + i] = a8;
+	}
+
+	return retval;
+}
+
+export fn crypto_sign_signature_jazz(reg u64 sigp, reg u64 siglenp, reg u64 mp, reg u64 mlen,
+                                     reg u64 skp)
+ -> reg u32
+{
+	inline int i;
+
+	reg u8 a8;
+
+	reg u64 a64;
+
+	stack u8[PYR_BYTES] sig;
+
+	stack u8[PYR_SK_BYTES] sk;
+
+	stack u64[1] siglen;
+
+	stack u64 s_sigp s_siglenp s_skp;
+
+	reg u32 retval;
+
+	for i = 0 to PYR_SK_BYTES {
+		a8 = (u8) [skp + i];
+		sk[i] = a8;
+	}
+
+	s_sigp = sigp;
+	s_siglenp = siglenp;
+	s_skp = skp;
+
+ 	retval, sig, siglen, sk = crypto_sign_signature(sig, siglen, mp, mlen, sk);
+
+	sigp = s_sigp;
+	siglenp = s_siglenp;
+	skp = s_skp;
+
+	a64 = siglen[0];
+	(u64) [siglenp] = a64;
+
+	for i = 0 to PYR_BYTES {
+		a8 = sig[i];
+		(u8) [sigp + i] = a8;
+	}
+
+	for i = 0 to PYR_SK_BYTES {
+		a8 = sk[i];
+		(u8) [skp + i] = a8;
+	}
+
+	return retval;
+}
+
+
+export fn crypto_sign_verify_jazz(reg u64 sigp, reg u64 siglen, reg u64 mp, reg u64 mlen,
+                                     reg u64 pkp)
+ -> reg u32
+{
+	inline int i;
+
+	reg u8 a8;
+
+	reg u64 a64;
+
+	stack u8[PYR_BYTES] sig;
+
+	stack u8[PYR_PK_BYTES] pk;
+
+	reg u32 retval;
+
+	for i = 0 to PYR_BYTES {
+		a8 = (u8) [sigp + i];
+		sig[i] = a8;
+	}
+
+	for i = 0 to PYR_PK_BYTES {
+		a8 = (u8) [pkp + i];
+		pk[i] = a8;
+	}
+
+ 	retval = crypto_sign_verify(sig, siglen, mp, mlen, pk);
+
+	return retval;
+}

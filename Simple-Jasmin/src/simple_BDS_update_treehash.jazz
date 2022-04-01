@@ -1,0 +1,39 @@
+require "pyramid_params.jahh"
+require "simple_BDS_update_treehash.jahh"
+require "simple_BDS_state_format.jahh"
+
+export fn BDS_update_treehash_jazz(reg u64 sk_psdp, reg u32 target_height, reg u64 statep)
+{
+	inline int i;
+
+	reg u8 a8;
+
+	reg u32 a32 t;
+
+	stack u8[PYR_N] sk_psd;
+
+	stack u8[BDS_SIZE] state;
+
+	stack u64 s_statep;
+
+	for i = 0 to PYR_N {
+		a8 = (u8) [sk_psdp + i];
+		sk_psd[i] = a8;
+	}
+
+	for i = 0 to BDS_SIZE {
+		a8 = (u8) [statep + i];
+		state[i] = a8;
+	}
+
+	s_statep = statep;
+
+	state = BDS_update_treehash(sk_psd, target_height, state);
+			    
+	statep = s_statep;
+
+	for i = 0 to BDS_SIZE {
+		a8 = state[i];
+		(u8) [statep + i] = a8;
+	}
+}

@@ -1,0 +1,50 @@
+require "pyramid_params.jahh"
+require "pyr_address.jahh"
+require "pyr_treehash.jahh"
+require "utils.jahh"
+
+/*
+    Generates a Pyramid key pair. 
+    Format public key: [PK.Root || PK.Seed]
+    Format secret key: [index || SK.Seed || SK.PRF || PK.Root || PK.Seed]
+
+    The public key should include the Algorithm OID in future versions.
+*/
+inline fn crypto_sign_seed_keypair(stack u8[PYR_PK_BYTES] pk, stack u8[PYR_SK_BYTES] sk,
+                                   stack u8[CRYPTO_SEEDBYTES] seed)
+-> reg u32, stack u8[PYR_PK_BYTES], stack u8[PYR_SK_BYTES]
+{
+    inline int i;
+    reg u32 retval leaf_idx layer;
+    stack u8[AUTH_BYTES] auth_path; 
+    stack u32[8] top_tree_addr;    
+
+    /* Initialize the address for generation of the top tree by Treehash. */
+    top_tree_addr = init_addr(top_tree_addr);
+    layer = PYR_D - 1;
+    top_tree_addr = set_layer_addr(top_tree_addr, layer); 
+
+    /* Initialize the sk index. */
+    for i = 0 to PYR_IDX_BYTES {
+    	sk[i] = 0;
+    }
+
+    /* Initialize random fields in sk and pk. */
+    sk[SK_SSD:PYR_N] = cpy_N(sk[SK_SSD:PYR_N], seed[0*PYR_N:PYR_N]);
+    sk[SK_PRF:PYR_N] = cpy_N(sk[SK_PRF:PYR_N], seed[1*PYR_N:PYR_N]);
+    sk[SK_PSD:PYR_N] = cpy_N(sk[SK_PSD:PYR_N], seed[2*PYR_N:PYR_N]);
+    pk[PK_SD:PYR_N]  = cpy_N(pk[PK_SD:PYR_N] , seed[2*PYR_N:PYR_N]);
+
+    /* Generate the hypertree root. The authentication path is a by-product and remains unused. */
+    leaf_idx = 0;
+    sk[SK_PRT:PYR_N], auth_path = treehash(sk[SK_PRT:PYR_N], auth_path, sk[SK_SSD:PYR_N],
+                                           sk[SK_PSD:PYR_N], leaf_idx, top_tree_addr);
+
+    /* Initialize the hypertree root in the public key. */
+    pk[PK_RT:PYR_N] = cpy_N(pk[PK_RT:PYR_N], sk[SK_PRT:PYR_N]);
+
+    /* There are no indicators of erroneous conditions in the above routine. */
+    retval = 0;
+
+    return retval, pk, sk;
+}

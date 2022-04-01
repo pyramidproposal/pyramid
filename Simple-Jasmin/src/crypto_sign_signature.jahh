@@ -1,0 +1,298 @@
+require "pyramid_params.jahh"
+require "pyr_address.jahh"
+require "utils.jahh"
+require "format.jahh"
+require "pyr_hash_shake256.jahh"
+require "simple_xmss_root_from_sig.jahh"
+require "simple_tree_sig.jahh"
+require "simple_BDS_state_update.jahh"
+require "simple_MMT_state_update.jahh"
+
+/* The following are used to point to authhentication path within state. 
+   C implementation uses a pointer. Also contains BDS_SIZE and MMT_SIZE definitions.   */
+require "simple_BDS_state_format.jahh"
+require "simple_MMT_state_format.jahh"
+
+/* The number of bytes in the "base" of the signature, i.e. before the hypertree parts. */
+param int SIG_BASE_BYTES = SIG_HTS;
+
+/* The number of bytes in the hypertree signature, i.e. after the signature base. */
+param int SIG_HTS_BYTES = PYR_BYTES - SIG_HTS;
+
+/* 
+   If we can conditionally define compile-time constans like in C, 
+   then the following predicates can be simplified. The nice part in Jasmin is that we can 
+   shift inline integers by 64 positions without a warning (unbounded).
+*/
+
+/* Generate the message hash and the signature base: [index || hash randomization value] */
+inline fn sig_mhash_base(stack u8[PYR_N] mhash, stack u8[SIG_BASE_BYTES] sig,
+                         stack u8[PYR_SK_CORE_BYTES] sk, stack u64 s_mp,
+			 stack u64 s_mlen, reg u64 idx)
+-> stack u8[PYR_N], stack u8[SIG_BASE_BYTES]
+{
+    stack u32[8] addr;
+    reg u64 mp mlen;
+
+    /* Initialize the address for the PRF & H_msg calls. 
+       For the latter, we will change the type after PRF. */
+    addr = init_addr(addr);
+    addr = set_keypair_addr_bottom(addr, idx);
+    addr = set_type(addr, PYR_ADDR_TYPE_PRF);
+    
+    /* Generate the hash randomization value directly into sig. */
+    sig[SIG_RND:PYR_N] = prf(sig[SIG_RND:PYR_N], sk[SK_PRF:PYR_N], sk[SK_PSD:PYR_N], addr);
+
+    /* Generate the message hash. */
+    mp = s_mp;
+    mlen = s_mlen;
+    addr = set_type(addr, PYR_ADDR_TYPE_HMSG);
+    mhash = h_msg(mhash, sig[SIG_RND:PYR_N], sk[SK_PRT:PYR_N], addr, mp, mlen);
+
+    /* Copy the index from sk to sig. */
+    sig[SIG_IDX:PYR_IDX_BYTES] = cpy_IDX(sig[SIG_IDX:PYR_IDX_BYTES], sk[SK_IDX:PYR_IDX_BYTES]);
+
+    return mhash, sig;
+}
+
+/* Finalize the signature by adding the interwoven WOTS signatures and 
+   authentication paths on hypertree layers 0, ..., d-1. */
+inline fn finalize_sig(stack u8[SIG_HTS_BYTES] sig, stack u8[PYR_SK_BYTES] sk,
+                       stack u8[PYR_N] mhash, reg u64 idx)
+-> stack u8[SIG_HTS_BYTES]
+{
+    inline int i offset offset2 auth_offset;
+    reg u32 idx_leaf;
+    reg u64 idx_tree;
+    
+    stack u8[PYR_N] S root;
+    stack u32[8] addr;
+
+    stack u32 s_idx_leaf;
+    stack u64 s_idx_tree;
+
+    addr = init_addr(addr);
+
+    /* To finalize sig we purely require a hypertree signature, as shown by its size. */
+    offset = 0;
+
+    idx_tree = idx;
+    s_idx_tree = idx_tree;
+
+    /* This is an example of a for loop that we would not want to unroll. 
+       A for loop is used to preserve code readability and use sub-arrays. */
+    for i = 0 to PYR_D {
+
+    	/* On hypertree layer =0, WOTS signs a message that is located in mhash. 
+	   On hypertree layer >0, WOTS signs the root of the previous hypertree layer. */
+        if(i == 0){
+            root = cpy_N(root, mhash);
+	    auth_offset = PYR_SK_CORE_BYTES + BDS_AUTH;
+        } else {
+	    /* xmss_root_from_sig_comp generates the compressed WOTS public key
+               from the previous WOTS signature, to then compute the tree root
+               using the previous authentication path. */
+            offset2 = offset - PYR_XMSS_BYTES; /* previous XMSS signature */
+	    idx_leaf = s_idx_leaf;
+	    root = xmss_root_from_sig_comp(root, idx_leaf, sig[offset2:PYR_XMSS_BYTES],
+	                                   sk[SK_PSD:PYR_N], addr);
+	    auth_offset = PYR_SK_CORE_BYTES + BDS_SIZE + (i - 1) * MMT_SIZE + MMT_AUTH;
+	}
+
+	/* Create the address for xmss_root_from_sig_comp, fsg_0, tree_sig. */
+	idx_tree = s_idx_tree;
+	idx_leaf = idx_tree;
+	idx_leaf &= (1 << PYR_TREE_HEIGHT) - 1;
+	idx_tree >>= PYR_TREE_HEIGHT;
+	s_idx_leaf = idx_leaf;
+	s_idx_tree = idx_tree;
+
+	addr = set_layer_addr_(addr, i);
+	addr = set_tree_addr(addr, idx_tree);
+	addr = set_keypair_addr(addr, idx_leaf);
+
+	/* Compute the WOTS seed from the FSG reference on this hypertree layer. */
+	offset2 = SK_SSD + i * PYR_N;
+	S = fsg_0(S, sk[offset2:PYR_N], sk[SK_PSD:PYR_N], addr);
+
+	/* Create a WOTS signature and copy the precomputed authentication path from the 
+           state into sig, thereby finishing the XMSS signature for this hypertree layer. */
+	idx_leaf = s_idx_leaf;
+	sig[offset:PYR_XMSS_BYTES] = tree_sig(sig[offset:PYR_XMSS_BYTES], root, S, 
+	                                      sk[SK_PSD:PYR_N], idx_leaf, addr,
+					      sk[auth_offset:AUTH_BYTES]);
+
+	offset += PYR_XMSS_BYTES;
+    }
+
+    return sig;
+}
+
+/* Perform a BDS/MMT state update for every hypertree layer. */
+inline fn update_state(stack u8[PYR_SK_BYTES] sk)
+-> reg ptr u8[PYR_SK_BYTES]
+{
+    inline int i offset;
+    reg u32 layer;
+    
+    offset = PYR_SK_CORE_BYTES;
+
+    /* Layer 0 uses a BDS state. */
+    sk[offset:BDS_SIZE] = BDS_state_update(sk[offset:BDS_SIZE], sk[0:PYR_SK_CORE_BYTES]);
+    offset += BDS_SIZE;
+
+    /* Layers >0 use an MMT state. */
+    for i = 1 to PYR_D {
+	 layer = i;
+         sk[offset:MMT_SIZE] = MMT_state_update(sk[offset:MMT_SIZE],
+	                                        sk[0:PYR_SK_CORE_BYTES], layer);
+	 offset += MMT_SIZE;
+    }
+    return sk;
+}
+
+/* Forwards the FSG references when we have finished using the corresponding OTS keypair. */
+inline fn forget_refs(stack u8[PYR_SK_CORE_BYTES] sk, reg u64 idx)
+-> stack u8[PYR_SK_CORE_BYTES]
+{
+    inline int i;
+    reg u32 j idx_leaf;    
+    reg u64 idx_tree c;
+    
+    stack u8[PYR_N] sk_ssd;
+    stack u32[8] addr;
+
+    stack u32 s_j;
+    stack u64 s_idx_tree;
+    
+    addr = init_addr(addr);
+
+    idx_tree = idx;
+    idx_tree >>= PYR_TREE_HEIGHT;
+    idx_leaf = idx;
+    idx_leaf &= (1 << PYR_TREE_HEIGHT) - 1;
+    s_idx_tree = idx_tree;
+
+    addr = set_layer_addr_(addr, 0);
+    addr = set_tree_addr(addr, idx_tree);
+    addr = set_keypair_addr(addr, idx_leaf);
+
+    /* The update on the lowest layer is unconditional, because we use the bottom OTS 
+       to sign a new message every signature. */
+    sk[SK_SSD:PYR_N] = fsg_1_comp(sk[SK_SSD:PYR_N], sk[SK_PSD:PYR_N], addr);
+
+    /* Then, if layer (j - 1) just used its last OTS, forward the reference on hypertree layer j.
+       Like a carry, a layer j only forwards if every layer below it forwards. */
+    j = 1;
+    while {
+    	/* (j < PYR_D) && c */
+        if(j < PYR_D){
+	    /* c = ((idx_leaf + 1) >> PYR_TREE_HEIGHT) & 1; */
+	    c = (64u)idx_leaf;
+    	    c += 1;
+    	    c >>= PYR_TREE_HEIGHT;
+            c &= 1;
+	} else {
+	    c = 0;
+	}
+    } (c == 1) {
+        s_j = j;
+
+	idx_tree = s_idx_tree;
+	idx_leaf = idx_tree;
+	idx_leaf &= (1 << PYR_TREE_HEIGHT) - 1;
+	idx_tree >>= PYR_TREE_HEIGHT;
+	s_idx_tree = idx_tree;	
+
+	addr = set_layer_addr(addr, j);
+	addr = set_tree_addr(addr, idx_tree);
+	addr = set_keypair_addr(addr, idx_leaf);
+
+	/* Obtain the reference that is forwarded (runtime index), forward it, 
+           and store it back into the secret key. */
+	sk_ssd = SK_get_ssd(sk_ssd, sk, j);
+	sk_ssd = fsg_1_comp(sk_ssd, sk[SK_PSD:PYR_N], addr);
+	sk = SK_set_ssd(sk, sk_ssd, j);
+
+	j = s_j;
+	j += 1;
+    }
+
+    return sk;
+}
+
+/*
+    Returns an array containing a detached signature.
+*/
+inline fn crypto_sign_signature(stack u8[PYR_BYTES] sig, stack u64[1] siglen,
+                                reg u64 mp, reg u64 mlen, stack u8[PYR_SK_BYTES] sk)
+-> reg u32, stack u8[PYR_BYTES], stack u64[1], stack u8[PYR_SK_BYTES]
+{
+    reg bool status;
+    reg u32 res;
+    reg u64 idx;
+    
+    stack u8[PYR_N] mhash;
+
+    stack u64 s_idx;
+    stack u64 s_mp s_mlen;
+
+    idx = btou64_idx(sk[SK_IDX:PYR_IDX_BYTES]);
+
+    /* Spill registers in preparation for upcoming hash operations. */
+    s_mp = mp;
+    s_mlen = mlen;
+    s_idx = idx;
+
+    /* The signature length is 0 bytes, until we have completely finished it. */
+    siglen[0] = 0;
+
+    /* Proceed with the signature only if the index in sk is valid. */
+    status = invalid_idxp(idx);
+    if(status){
+        res = -2;
+    } else {
+        /* Obtain the message hash and create the base of the signature, 
+           i.e. the index and the hash randomization value. */
+	mhash, sig[0:SIG_BASE_BYTES] =
+	    sig_mhash_base(mhash, sig[0:SIG_BASE_BYTES], sk[0:PYR_SK_CORE_BYTES], s_mp,
+	                   s_mlen, idx);
+
+        /* Finish the hypertree part of the signature, i.e. the interwoven 
+           WOTS signatures and authentication path on hypertree layers 0, ..., d-1.*/
+	idx = s_idx;
+	sig[SIG_HTS:SIG_HTS_BYTES] = finalize_sig(sig[SIG_HTS:SIG_HTS_BYTES], sk, mhash, idx);
+
+	/* If idx is the last valid index, delete the secret key. Otherwise, increment idx. */
+	/* res reflects the state of the sk that is returned.*/
+	idx = s_idx;
+	status = last_idxp(idx);
+	if(status){
+	    sk = delete_sk(sk);
+	    res = -1;
+	} else { /* If sk is not being deleted, update the state in sk. */
+
+	    /* 1. Update the external BDS/MMT states first; these may require the 
+                  references that are forwarded in step 2. */
+	    sk = update_state(sk);
+
+	    /* 2. Forward references that expire for this index. */
+	    idx = s_idx;
+	    sk[0:PYR_SK_CORE_BYTES] = forget_refs(sk[0:PYR_SK_CORE_BYTES], idx);
+
+	    /* 3. Update the index in the secret key. */
+	    idx = s_idx;
+	    idx += 1;
+	    sk[SK_IDX:PYR_IDX_BYTES] = u64tob_idx(sk[SK_IDX:PYR_IDX_BYTES], idx);
+
+	    /* No failure state identified. */
+	    res = 0;
+	}
+
+	/* Regardless of sk being deleted, we did create a valid signature. */
+        siglen[0] = PYR_BYTES;
+    }
+
+
+    return res, sig, siglen, sk;
+}

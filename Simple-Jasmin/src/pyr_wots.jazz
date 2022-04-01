@@ -1,0 +1,431 @@
+require "pyramid_params.jahh"
+require "pyr_wots.jahh"
+
+export fn expand_seed_jazz(reg u64 outseedsp, reg u64 inseedp,
+                           reg u64 pub_seedp, reg u64 addrp)
+{
+	inline int i;
+
+	reg u8 a8;
+
+	reg u32 a32;
+
+	stack u8[PYR_N] inseed pub_seed;
+
+	stack u32[8] addr;
+
+	stack u8[PYR_WOTS_PK_BYTES] outseeds;
+
+	stack u64 s_outseedsp;
+
+	for i = 0 to PYR_N {
+		a8 = (u8) [inseedp + i];
+		inseed[i] = a8;
+	}
+
+	for i = 0 to PYR_N {
+		a8 = (u8) [pub_seedp + i];
+		pub_seed[i] = a8;
+	}
+
+	for i = 0 to 8 {
+		a32 = (u32) [addrp + 4*i];
+		addr[i] = a32;
+	}
+
+	s_outseedsp = outseedsp;
+
+	outseeds = expand_seed(outseeds, inseed, pub_seed, addr);
+
+	outseedsp = s_outseedsp;
+
+	for i = 0 to PYR_WOTS_PK_BYTES {
+		a8 = outseeds[i];
+		(u8) [outseedsp + i] = a8;
+	}
+}
+
+export fn gen_chain_jazz(reg u64 inoutp, reg u32 start, reg u32 steps, reg u64 pub_seedp, reg u64 addrp)
+{
+	inline int i;
+
+	reg u8 a8;
+
+	reg u32 a32;
+
+	stack u8[PYR_N] inout pub_seed;
+
+	stack u32[8] addr;
+
+	stack u64 s_inoutp, s_addrp;
+
+	for i = 0 to PYR_N {
+		a8 = (u8) [inoutp + i];
+		inout[i] = a8;
+	}
+
+	for i = 0 to PYR_N {
+		a8 = (u8) [pub_seedp + i];
+		pub_seed[i] = a8;
+	}
+
+	for i = 0 to 8 {
+		a32 = (u32) [addrp + 4*i];
+		addr[i] = a32;
+	}
+
+	s_inoutp = inoutp;
+	s_addrp = addrp;
+
+	inout, addr = gen_chain(inout, start, steps, pub_seed, addr);
+
+	inoutp = s_inoutp;
+	addrp = s_addrp;
+
+	for i = 0 to PYR_N {
+		a8 = inout[i];
+		(u8) [inoutp + i] = a8;
+	}
+
+	for i = 0 to 8 {
+		a32 = addr[i];
+		(u32) [addrp + 4 * i] = a32;
+	}
+}
+
+export fn base_w_m_jazz(reg u64 outputp, reg u64 inputp)
+{
+	inline int i;
+
+	reg u8 a8;
+
+	reg u32 a32;
+
+	stack u8[PYR_N] input;
+	
+	stack u32[PYR_WOTS_LEN1] output;
+
+	stack u64 s_outputp;
+
+	for i = 0 to PYR_N {
+		a8 = (u8) [inputp + i];
+		input[i] = a8;
+	}
+
+	s_outputp = outputp;
+
+	output = base_w_m(output, input);
+
+	outputp = s_outputp;
+
+	for i = 0 to PYR_WOTS_LEN1 {
+		a32 = output[i];
+		(u32) [outputp + 4*i] = a32;
+	}
+}
+
+export fn base_w_c_jazz(reg u64 outputp, reg u64 inputp)
+{
+	inline int i;
+
+	reg u8 a8;
+
+	reg u32 a32;
+
+	stack u8[CSUM_BYTES] input;
+	
+	stack u32[PYR_WOTS_LEN2] output;
+
+	stack u64 s_outputp;
+
+	for i = 0 to CSUM_BYTES {
+		a8 = (u8) [inputp + i];
+		input[i] = a8;
+	}
+
+	s_outputp = outputp;
+
+	output = base_w_c(output, input);
+
+	outputp = s_outputp;
+
+	for i = 0 to PYR_WOTS_LEN2 {
+		a32 = output[i];
+		(u32) [outputp + 4*i] = a32;
+	}
+}
+
+export fn wots_checksum_jazz(reg u64 csum_base_wp, reg u64 msg_base_wp)
+{
+	inline int i;
+
+	reg u32 a32;
+
+	stack u32[PYR_WOTS_LEN1] msg_base_w;
+
+	stack u32[PYR_WOTS_LEN2] csum_base_w;
+
+	stack u64 s_csum_base_wp;
+
+	for i = 0 to PYR_WOTS_LEN1 {
+		a32 = (u32) [msg_base_wp + 4*i];
+		msg_base_w[i] = a32;
+	}
+
+	s_csum_base_wp = csum_base_wp;
+
+	csum_base_w = wots_checksum(csum_base_w, msg_base_w);
+
+	csum_base_wp = s_csum_base_wp;
+
+	for i = 0 to PYR_WOTS_LEN2 {
+		a32 = csum_base_w[i];
+		(u32) [csum_base_wp + 4*i] = a32;
+	}
+}
+
+export fn chain_lengths_jazz(reg u64 lengthsp, reg u64 msgp)
+{
+	inline int i;
+
+	reg u8 a8;
+
+	reg u32 a32;
+
+	stack u8[PYR_N] msg;
+
+	stack u32[PYR_WOTS_LEN] lengths;
+
+	stack u64 s_lengthsp;
+
+	for i = 0 to PYR_N {
+		a8 = (u8) [msgp + i];
+		msg[i] = a8;
+	}
+
+	s_lengthsp = lengthsp;
+
+	lengths = chain_lengths(lengths, msg);
+
+	lengthsp = s_lengthsp;
+
+	for i = 0 to PYR_WOTS_LEN {
+		a32 = lengths[i];
+		(u32) [lengthsp + 4*i] = a32;
+	}
+}
+
+export fn wots_pkgen_jazz(reg u64 pkp, reg u64 seedp, reg u64 pub_seedp, reg u64 addrp)
+{
+	inline int i;
+
+	reg u8 a8;
+
+	reg u32 a32;
+
+	stack u8[PYR_N] seed pub_seed;
+
+	stack u8[PYR_WOTS_PK_BYTES] pk;
+
+	stack u32[8] addr;
+
+	stack u64 s_pkp, s_addrp;
+
+	for i = 0 to PYR_N {
+		a8 = (u8) [seedp + i];
+		seed[i] = a8;
+	}
+
+	for i = 0 to PYR_N {
+		a8 = (u8) [pub_seedp + i];
+		pub_seed[i] = a8;
+	}
+
+	for i = 0 to 8 {
+		a32 = (u32) [addrp + 4*i];
+		addr[i] = a32;
+	}
+
+	s_pkp = pkp;
+	s_addrp = addrp;
+
+	pk, addr = wots_pkgen(pk, seed, pub_seed, addr);
+
+	pkp = s_pkp;
+	addrp = s_addrp;
+
+	for i = 0 to PYR_WOTS_PK_BYTES {
+		a8 = pk[i];
+		(u8) [pkp + i] = a8;
+	}
+
+	for i = 0 to 8 {
+		a32 = addr[i];
+		(u32) [addrp + 4 * i] = a32;
+	}
+}
+
+export fn wots_sign_jazz(reg u64 sigp, reg u64 msgp, reg u64 seedp, reg u64 pub_seedp, reg u64 addrp)
+{
+	inline int i;
+
+	reg u8 a8;
+
+	reg u32 a32;
+
+	stack u8[PYR_N] msg seed pub_seed;
+
+	stack u8[PYR_WOTS_BYTES] sig;
+
+	stack u32[8] addr;
+
+	stack u64 s_sigp, s_addrp;
+
+	for i = 0 to PYR_N {
+		a8 = (u8) [msgp + i];
+		msg[i] = a8;
+	}
+
+	for i = 0 to PYR_N {
+		a8 = (u8) [seedp + i];
+		seed[i] = a8;
+	}
+
+	for i = 0 to PYR_N {
+		a8 = (u8) [pub_seedp + i];
+		pub_seed[i] = a8;
+	}
+
+	for i = 0 to 8 {
+		a32 = (u32) [addrp + 4*i];
+		addr[i] = a32;
+	}
+
+	s_sigp = sigp;
+	s_addrp = addrp;
+
+	sig, addr = wots_sign(sig, msg, seed, pub_seed, addr);
+
+	sigp = s_sigp;
+	addrp = s_addrp;
+
+	for i = 0 to PYR_WOTS_BYTES {
+		a8 = sig[i];
+		(u8) [sigp + i] = a8;
+	}
+
+	for i = 0 to 8 {
+		a32 = addr[i];
+		(u32) [addrp + 4 * i] = a32;
+	}
+}
+
+export fn wots_pk_from_sig_jazz(reg u64 pkp, reg u64 sigp, reg u64 msgp, reg u64 pub_seedp, reg u64 addrp)
+{
+	inline int i;
+
+	reg u8 a8;
+
+	reg u32 a32;
+
+	stack u8[PYR_N] msg pub_seed;
+
+	stack u8[PYR_WOTS_PK_BYTES] pk;
+
+	stack u8[PYR_WOTS_BYTES] sig;
+
+	stack u32[8] addr;
+
+	stack u64 s_pkp, s_addrp;
+
+	for i = 0 to PYR_WOTS_BYTES {
+		a8 = (u8) [sigp + i];
+		sig[i] = a8;
+	}
+
+	for i = 0 to PYR_N {
+		a8 = (u8) [msgp + i];
+		msg[i] = a8;
+	}
+
+	for i = 0 to PYR_N {
+		a8 = (u8) [pub_seedp + i];
+		pub_seed[i] = a8;
+	}
+
+	for i = 0 to 8 {
+		a32 = (u32) [addrp + 4*i];
+		addr[i] = a32;
+	}
+
+	s_pkp = pkp;
+	s_addrp = addrp;
+
+	pk, addr = wots_pk_from_sig(pk, sig, msg, pub_seed, addr);
+
+	pkp = s_pkp;
+	addrp = s_addrp;
+
+	for i = 0 to PYR_WOTS_PK_BYTES {
+		a8 = pk[i];
+		(u8) [pkp + i] = a8;
+	}
+
+	for i = 0 to 8 {
+		a32 = addr[i];
+		(u32) [addrp + 4 * i] = a32;
+	}
+}
+
+export fn gen_leaf_wots_jazz(reg u64 leafp, reg u64 sk_seedp, reg u64 pub_seedp, reg u64 wotspk_addrp, reg u64 ots_addrp)
+{
+	inline int i;
+
+	reg u8 a8;
+
+	reg u32 a32;
+
+	stack u8[PYR_N] leaf sk_seed pub_seed;
+
+	stack u32[8] wotspk_addr ots_addr;
+
+	stack u64 s_leafp s_ots_addrp;
+
+	for i = 0 to PYR_N {
+		a8 = (u8) [sk_seedp + i];
+		sk_seed[i] = a8;
+	}
+
+	for i = 0 to PYR_N {
+		a8 = (u8) [pub_seedp + i];
+		pub_seed[i] = a8;
+	}
+
+	for i = 0 to 8 {
+		a32 = (u32) [wotspk_addrp + 4*i];
+		wotspk_addr[i] = a32;
+	}
+
+	for i = 0 to 8 {
+		a32 = (u32) [ots_addrp + 4*i];
+		ots_addr[i] = a32;
+	}
+
+	s_leafp = leafp;
+	s_ots_addrp = ots_addrp;
+
+	leaf, ots_addr = gen_leaf_wots(leaf, sk_seed, pub_seed, wotspk_addr, ots_addr);
+
+	leafp = s_leafp;
+	ots_addrp = s_ots_addrp;
+
+	for i = 0 to PYR_N {
+		a8 = leaf[i];
+		(u8) [leafp + i] = a8;
+	}
+
+	for i = 0 to 8 {
+		a32 = ots_addr[i];
+		(u32) [ots_addrp + 4 * i] = a32;
+	}
+}

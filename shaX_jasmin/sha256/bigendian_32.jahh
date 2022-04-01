@@ -1,0 +1,55 @@
+inline fn load32(reg const ptr u8[4] x) -> reg u32
+{
+  inline int i;
+
+  reg u32 res tmp;
+
+  res = (32u)x[3];
+  
+  for i = 0 to 3 {
+    tmp = (32u)x[i];
+    tmp <<= 8*(3 - i);
+    res |= tmp;
+  }
+
+  return res;
+}
+
+inline fn load32_in(reg u64 x) -> reg u32
+{
+  inline int i;
+  reg u8 t8;
+  reg u32 res t32;
+
+  t8 = (u8)[x];
+  t32 = (32u)t8;
+  res = t32;
+  res <<= 8;
+
+  for i = 1 to 3 {
+    t8 = (u8)[x + i];
+    t32 = (32u)t8;
+    res |= t32;
+    res <<= 8;
+  }
+  
+  t8 = (u8)[x + 3];
+  t32 = (32u)t8;
+  res |= t32;
+
+  return res;
+}
+
+inline fn store32(reg ptr u8[4] x, reg u32 u) -> reg ptr u8[4]
+{
+  inline int i;
+	
+  for i = 3 downto 0 {
+    x[i] = u;
+    u >>= 8;
+  }
+	
+  x[0] = u;
+
+  return x;
+}

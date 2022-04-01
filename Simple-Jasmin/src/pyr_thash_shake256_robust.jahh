@@ -1,0 +1,167 @@
+require "pyramid_params.jahh"
+require "fips202_shake256_PYR_N_TH1_INLEN.jahh"
+require "fips202_shake256_PYR_N_TH2_INLEN.jahh"
+require "fips202_shake256_PYR_N_THLEN_INLEN.jahh"
+require "fips202_shake256_TH1_MASK_INLEN.jahh"
+require "fips202_shake256_TH2_MASK_INLEN.jahh"
+require "fips202_shake256_THLEN_MASK_INLEN.jahh"
+require "pyr_address.jahh"
+require "utils.jahh"
+
+/* Helper function for setting up the thash buffer. */
+inline fn thash_fill(reg ptr u8[TH_INLEN] buf, reg ptr u8[PYR_N] pub_seed, reg ptr u32[8] addr)
+-> reg ptr u8[TH_INLEN]
+{
+    inline int offset;
+    offset = 0;
+    buf[offset:PYR_N] = cpy_N(buf[offset:PYR_N], pub_seed);
+    offset += PYR_N;
+    buf[offset:PYR_ADDR_BYTES] = store_addr(buf[offset:PYR_ADDR_BYTES], addr);
+    offset += PYR_ADDR_BYTES;
+    return buf;
+}
+
+/* Compound thash function F. */
+#[returnaddress="stack"]
+fn thash1(reg ptr u8[PYR_N] inout, reg ptr u8[PYR_N] pub_seed,
+          reg ptr u32[8] addr)
+-> reg ptr u8[PYR_N]
+{
+    inline int offset;
+    stack u8[TH1_INLEN] buf;
+    stack u8[PYR_N] bitmask;
+
+    stack ptr u8[PYR_N] s_inout;
+
+    offset = 0;
+    buf[offset:TH_INLEN] = thash_fill(buf[offset:TH_INLEN], pub_seed, addr);
+    offset += TH_INLEN;
+
+    s_inout = inout;
+    bitmask = shake256_TH1_MASK_INLEN(bitmask, buf[0:MASK_INLEN]);
+    inout = s_inout;
+
+    buf[offset:PYR_N] = cpy_N(buf[offset:PYR_N], inout);
+    buf[offset:PYR_N] = xor_N(buf[offset:PYR_N], bitmask);
+    
+    inout = shake256_PYR_N_TH1_INLEN(inout, buf);
+    
+    return inout;
+}
+
+/* Thash function H. */
+#[returnaddress="stack"]
+fn thash2(reg ptr u8[PYR_N] out, reg ptr u8[2*PYR_N] in,
+       	  reg ptr u8[PYR_N] pub_seed, reg ptr u32[8] addr)
+-> reg ptr u8[PYR_N]
+{
+    inline int i offset;
+    stack u8[TH2_INLEN] buf;
+    stack u8[2*PYR_N] bitmask;
+
+    stack ptr u8[PYR_N] s_out;
+    stack ptr u8[2*PYR_N] s_in;
+
+    offset = 0;
+    buf[offset:TH_INLEN] = thash_fill(buf[offset:TH_INLEN], pub_seed, addr);
+    offset += TH_INLEN;
+
+    s_out = out; s_in = in;
+    bitmask = shake256_TH2_MASK_INLEN(bitmask, buf[0:MASK_INLEN]);
+    out = s_out; in = s_in;
+
+    for i = 0 to 2 {
+        buf[offset:PYR_N] = cpy_N(buf[offset:PYR_N], in[i*PYR_N: PYR_N]);
+    	buf[offset:PYR_N] = xor_N(buf[offset:PYR_N], bitmask[i*PYR_N: PYR_N]);
+	offset += PYR_N;
+    }
+
+    out = shake256_PYR_N_TH2_INLEN(out, buf);
+    
+    return out;
+}
+
+
+/* Compound thash function H, not for regular usage. */
+inline fn thash2_comp(reg ptr u8[2*PYR_N] inout, reg ptr u8[PYR_N] pub_seed,
+                      reg ptr u32[8] addr, inline int lr)
+-> reg ptr u8[2*PYR_N]
+{
+    inline int i offset;
+    stack u8[TH2_INLEN] buf;
+    stack u8[2*PYR_N] bitmask;
+
+    stack ptr u8[2*PYR_N] s_inout;
+
+    offset = 0;
+    buf[offset:TH_INLEN] = thash_fill(buf[offset:TH_INLEN], pub_seed, addr);
+    offset += TH_INLEN;
+
+    s_inout = inout;
+    bitmask = shake256_TH2_MASK_INLEN(bitmask, buf[0:MASK_INLEN]);
+    inout = s_inout;
+
+    for i = 0 to 2 {
+        buf[offset:PYR_N] = cpy_N(buf[offset:PYR_N], inout[i*PYR_N: PYR_N]);
+    	buf[offset:PYR_N] = xor_N(buf[offset:PYR_N], bitmask[i*PYR_N: PYR_N]);
+	offset += PYR_N;
+    }
+
+    inout[lr*PYR_N:PYR_N] = shake256_PYR_N_TH2_INLEN(inout[lr*PYR_N:PYR_N], buf);
+    
+    return inout;
+}
+
+/* Compound thash function H; result at offset 0. */
+#[returnaddress="stack"]
+fn thash2l(reg ptr u8[2*PYR_N] inout, reg ptr u8[PYR_N] pub_seed,
+           reg ptr u32[8] addr)
+-> reg ptr u8[2*PYR_N]
+{
+    inout = thash2_comp(inout, pub_seed, addr, 0);
+    
+    return inout;
+}
+
+/* Compound thash function H; result at offset n. */
+#[returnaddress="stack"]
+fn thash2r(reg ptr u8[2*PYR_N] inout, reg ptr u8[PYR_N] pub_seed,
+           reg ptr u32[8] addr)
+-> reg ptr u8[2*PYR_N]
+{
+    inout = thash2_comp(inout, pub_seed, addr, 1);
+    
+    return inout;
+}
+
+/* Thash function Th_lambda. */
+#[returnaddress="stack"]
+fn thashLEN(reg ptr u8[PYR_N] out, reg ptr u8[PYR_WOTS_BYTES] in,
+            reg ptr u8[PYR_N] pub_seed, reg ptr u32[8] addr)
+-> reg ptr u8[PYR_N]
+{
+    inline int i offset;
+    stack u8[THLEN_INLEN] buf;
+    stack u8[PYR_WOTS_BYTES] bitmask;
+
+    stack ptr u8[PYR_N] s_out;
+    stack ptr u8[PYR_WOTS_BYTES] s_in;
+
+    offset = 0;
+    buf[offset:TH_INLEN] = thash_fill(buf[offset:TH_INLEN], pub_seed, addr);
+    offset += TH_INLEN;
+
+    s_out = out; s_in = in;
+    bitmask = shake256_THLEN_MASK_INLEN(bitmask, buf[0:MASK_INLEN]);
+    out = s_out; in = s_in;
+
+    for i = 0 to PYR_WOTS_LEN {
+        buf[offset:PYR_N] = cpy_N(buf[offset:PYR_N], in[i*PYR_N: PYR_N]);
+    	buf[offset:PYR_N] = xor_N(buf[offset:PYR_N], bitmask[i*PYR_N: PYR_N]);
+	offset += PYR_N;
+    } 
+    
+    out = shake256_PYR_N_THLEN_INLEN(out, buf);
+    
+    return out;
+}

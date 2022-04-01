@@ -1,0 +1,104 @@
+require "pyramid_params.jahh"
+require "pyr_address.jahh"
+require "utils.jahh"
+require "simple_treehash.jahh"
+require "simple_BDS_state_format.jahh"
+require "simple_BDS_stategen.jahh"
+require "simple_MMT_state_format.jahh"
+require "simple_MMT_stategen.jahh"
+require "pyr_compute_root.jahh"
+
+/* Finalizes the Pyramid secret key by initializing the BDS/MMT states
+   and generating the root on hypertree layer d-1 in the process. */
+inline fn xmssmt_finalize_sk(stack u8[PYR_SK_BYTES] sk)
+-> stack u8[PYR_SK_BYTES]
+{
+    inline int i offset;
+    reg u32 layer idx_leaf tree_height s t;
+    stack u8[PYR_N] leaf null;
+    stack u32[8] addr;
+
+    /* The external states start from offset PYR_SK_CORE_BYTES. */
+    offset = PYR_SK_CORE_BYTES;
+
+    /* Initialize the BDS state on the lowest layer. */
+    sk[offset:BDS_SIZE] = BDS_stategen(sk[offset:BDS_SIZE], sk[0:PYR_SK_CORE_BYTES]);
+    offset += BDS_SIZE;
+
+    /* For hypertree layers 1, ..., d-1: initialize MMT states. */
+    for i = 1 to PYR_D {
+        layer = i;
+        sk[offset:MMT_SIZE] = MMT_stategen(sk[offset:MMT_SIZE], sk[0:PYR_SK_CORE_BYTES], layer);
+	offset += MMT_SIZE;
+    }
+
+    /* Initialize the address that is used for Treehash & compute_root on layer d-1. */
+    addr = init_addr(addr);
+    addr = set_layer_addr_(addr, PYR_D - 1);
+    addr = set_tree_addr_(addr, 0);
+    addr = set_keypair_addr_(addr, 0);
+
+    /* Generate the first leaf on hypertree layer d-1;
+       because the BDS/MMT state already store the authentication path,
+       one does not need to Treehash to obtain the root on hypertree layer d-1. */
+    offset = SK_SSD + (PYR_D - 1) * PYR_N;
+    s = 0;
+    t = 0;
+    leaf, null = treehash(leaf, null, sk[offset:PYR_N], sk[SK_PSD:PYR_N], s, t, addr);
+
+    /* Given the first leaf node and its authentication path, use compute_root to
+       acquire the root of the tree on hypertree layer d-1. */
+    idx_leaf = 0;
+    tree_height = PYR_TREE_HEIGHT;
+    if(PYR_D == 1){ /* BDS top layer */
+        offset = PYR_SK_CORE_BYTES + BDS_AUTH;
+    } else {        /* MMT top layer */
+        offset = PYR_SK_CORE_BYTES + BDS_SIZE + (PYR_D - 2) * MMT_SIZE + MMT_AUTH;
+    }
+    sk[SK_PRT:PYR_N] = compute_root(sk[SK_PRT:PYR_N], leaf, sk[offset:AUTH_BYTES],
+		                    sk[SK_PSD:PYR_N], idx_leaf, tree_height, addr);
+
+    return sk;
+}
+
+/*
+ * Generates a Pyramid key pair given a seed of length CRYPTO_SEEDBYTES.
+ * Format sk: [index || SK.Seed || SK.PRF || PK.Seed || PK.Root || External state]
+ * Format pk: [PK.Seed || PK.Root]
+ * Future versions should include Algorithm OID in pk.
+ */
+inline fn crypto_sign_seed_keypair(stack u8[PYR_PK_BYTES] pk, stack u8[PYR_SK_BYTES] sk,
+                                   stack u8[CRYPTO_SEEDBYTES] seed)
+-> reg u32, stack u8[PYR_PK_BYTES], stack u8[PYR_SK_BYTES]
+{
+    inline int i offset;
+    reg u32 retval;
+
+    /* Initialize the index. */
+    for i = 0 to PYR_IDX_BYTES {
+        sk[SK_IDX + i] = 0;
+    }
+    /* Initialize d secret references from seed. */
+    offset = 0;
+    for i = 0 to PYR_D {
+    	sk[SK_SSD + offset:PYR_N] = cpy_N(sk[SK_SSD + offset:PYR_N], seed[offset:PYR_N]);
+	offset += PYR_N;
+    }
+    /* Initialize the PRF key and the public seed from seed. */
+    sk[SK_PRF:PYR_N] = cpy_N(sk[SK_PRF:PYR_N], seed[offset:PYR_N]);
+    offset += PYR_N;
+    sk[SK_PSD:PYR_N] = cpy_N(sk[SK_PSD:PYR_N], seed[offset:PYR_N]);
+    offset += PYR_N;
+
+    /* Initialize the external states and obtain the root on hypertree layer d-1. */
+    sk = xmssmt_finalize_sk(sk);
+
+    /* All of pk is also in sk. Copy over to finalize pk. */
+    pk[PK_RT:PYR_N] = cpy_N(pk[PK_RT:PYR_N], sk[SK_PRT:PYR_N]);
+    pk[PK_SD:PYR_N] = cpy_N(pk[PK_SD:PYR_N], sk[SK_PSD:PYR_N]);
+
+    /* No failure state identified. */
+    retval = 0;
+
+    return retval, pk, sk;
+}

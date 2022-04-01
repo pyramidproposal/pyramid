@@ -1,0 +1,96 @@
+require "sha512.jahh"
+require "bigendian_64.jahh"
+
+param int INLEN = 112; /* In bytes. */
+param int SHA512_ISS = 128;
+
+inline fn sha512_INLEN(reg ptr u8[64] output, reg const ptr u8[INLEN] input) -> reg ptr u8[64]
+{
+  inline int i j;
+  inline int iterations handled remainder;
+  reg u8 t8;
+  reg u64 t64;
+  stack u8[SHA512_ISS] t;
+  stack u64[8] H;
+  stack u64[16] M;
+
+  stack ptr u8[64] s_output;
+
+  iterations = INLEN / SHA512_ISS;
+  handled = iterations * SHA512_ISS;
+  remainder = INLEN - handled;
+
+  /* Spill output pointer. */
+  s_output = output;
+
+  /* 1. Set the initial hash value, H(0), as specified in Sec. 5.3.5. */
+  for i = 0 to 8 {
+    t64 = IV[i];
+    H[i] = t64;
+  }
+
+  /* Hash message blocks without padding. */
+  for j = 0 to iterations {
+    for i = 0 to (SHA512_ISS / 8) {
+      t64 = load64(input[j * SHA512_ISS + 8 * i:8]);
+      M[i] = t64;
+    }
+
+    H = iterate_hash(M, H);
+  }
+
+  /* Padding zeroes. */
+  for i = 0 to SHA512_ISS {
+    t[i] = 0;
+  }
+
+  /* Copy message remainder. */
+  for i = 0 to remainder {
+    t8 = input[handled + i];
+    t[i] = t8;
+  }
+
+  /* Append the bit “1” to the end of the message. */
+  t[remainder] = 0x80;
+
+  /* Conditional: padding requires another block. */
+  /* 16: message length; 1: 1-bit byte. */
+  if((remainder + 16 + 1) > SHA512_ISS){
+	
+    for i = 0 to (SHA512_ISS / 8) {
+      t64 = load64(t[8 * i:8]);
+      M[i] = t64;
+    }
+		
+    H = iterate_hash(M, H);
+
+    for i = 0 to remainder {
+        t[i] = 0;
+    }
+  }
+
+  /* 128-bit  block  that  is  equal  to  the  number l, 
+     expressed using a  binary  representation */
+  for i = 0 to 16 {
+    t[SHA512_ISS - 1 - i] = (INLEN*8) >> 8*i;
+  }
+
+  /* Hash final padded message block. */
+  for i = 0 to (SHA512_ISS / 8) {
+    t64 = load64(t[8 * i:8]);
+    M[i] = t64;
+  }
+
+  H = iterate_hash(M, H);
+
+  /* Pop output pointer. */
+  output = s_output;
+
+  /* Resulting 256-bit message digest. */
+  for i = 0 to 8 {
+    t64 = H[i];
+    output[8*i:8] = store64(output[8*i:8], t64);
+  }
+
+  return output;
+}

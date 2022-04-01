@@ -1,0 +1,25 @@
+require "pyramid_params.jahh"
+require "fips202_KeccakF1600_StatePermute.jahh"
+require "fips202_store64.jahh"
+
+inline fn keccak_squeezeblocks_256_PYR_N(reg ptr u8[PYR_N] h, reg ptr u64[25] s) -> reg ptr u8[PYR_N], reg ptr u64[25]
+{
+	inline int i;
+	inline int j;
+	inline int iterations;
+
+	reg u64 u;
+
+	iterations = PYR_N / SHAKE256_RATE;
+
+	for j = 0 to iterations {
+		s = KeccakF1600_StatePermute(s);
+
+		for i = 0 to (SHAKE256_RATE / 8) {
+			u = s[i];
+			h[j * SHAKE256_RATE + 8 * i:8] = store64(h[j * SHAKE256_RATE + 8 * i:8], u);
+		}
+	}
+
+	return h, s;
+}

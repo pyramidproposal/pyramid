@@ -1,0 +1,12 @@
+/* 
+    ABI_unpack is used to get around ABI limits for functional correctness tests.
+*/
+
+inline fn get_other(reg u32 s, reg u32 t, reg u64 otherp)
+-> reg u32, reg u32
+{
+    s = (u32) [otherp];
+    t = (u32) [otherp + 4];
+
+    return s, t;
+}

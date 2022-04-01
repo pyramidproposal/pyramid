@@ -1,0 +1,335 @@
+require "pyramid_params.jahh"
+require "pyr_wots.jahh"
+require "pyr_thash_shake256.jahh"
+require "pyr_address.jahh"
+require "utils.jahh"
+
+/* 
+    tree_hash in xmss_simple.c accepts a runtime argument t; 
+    t equals the height of the node that is calculated. 
+    Therefore, the stack space that is required depends on t. 
+    To account for this in Jasmin, the stack size corresponds to the maximum supported t, 
+    which is t = PYR_TREE_HEIGHT.
+*/
+param int STACK_SIZE = (PYR_TREE_HEIGHT+1)*PYR_N;
+
+inline fn nto(reg u32 a) -> reg u32
+{
+    inline int i;
+    reg u32 b;
+
+    b = a;
+    b = !b;
+    b -= 1;
+    b &= a; /* Trailing 1's */
+    _, _, _, _, _, b = #POPCNT_32(b);
+
+    return b;
+}
+
+/* require tau <= PYR_TREE_HEIGHT  <=>  masking before nto with (1 << PYR_TREE_HEIGHT) - 1 */
+inline fn get_tau(reg u32 idx_leaf) -> reg u32
+{
+  reg u32 a;
+  a = idx_leaf;
+  a &= (1 << PYR_TREE_HEIGHT) - 1;
+  a = nto(a);
+  return a;
+}
+
+/* Copy a node located at offset out of the stack. */
+inline fn TH_cpy_N(reg ptr u8[PYR_N] out, reg const ptr u8[STACK_SIZE] in, reg u64 offset)
+-> reg ptr u8[PYR_N]
+{
+    inline int i;
+    reg u8 a;
+
+    for i = 0 to PYR_N {
+    	a = in[i + (int) offset];
+    	out[i] = a;
+    }
+    return out;
+}
+
+#[returnaddress="stack"]
+fn treehash(reg ptr u8[PYR_N] root, reg ptr u8[PYR_N] next_ref,
+	     reg const ptr u8[PYR_N] sk_ssd, reg const ptr u8[PYR_N] sk_psd,
+	     reg u32 s, reg u32 t, reg const ptr u32[8] subtree_addr)
+-> reg ptr u8[PYR_N], reg ptr u8[PYR_N]
+{
+    inline int i;
+    reg u8 t8;
+    reg u32 j n tree_idx t32 idx_offset idx end_layer;
+    reg u64 offset;
+    stack u8[STACK_SIZE] th_stack;
+    stack u8[PYR_N] R S;
+    stack u8[2*PYR_N] current;
+    stack u32[8] wots_addr wotspk_addr hashtree_addr;
+    
+    stack u32 s_j s_n s_idx s_end_layer;
+    
+    stack u32 s_s s_t;
+    stack ptr u8[PYR_N] s_root s_next_ref s_sk_psd;
+
+    R = cpy_N(R, sk_ssd);
+
+    /* Zero-initialize the addresses. */
+    wots_addr = init_addr(wots_addr);
+    wotspk_addr = init_addr(wotspk_addr);
+    hashtree_addr = init_addr(hashtree_addr);
+
+    /* Copy hypertree layer, tree index. */
+    wots_addr = copy_subtree_addr(wots_addr, subtree_addr);
+    wotspk_addr = copy_subtree_addr(wotspk_addr, subtree_addr);
+    hashtree_addr = copy_subtree_addr(hashtree_addr, subtree_addr);
+
+    /* Set the type fields, conform the type of invocation that _addr is for. */
+    wots_addr = set_type(wots_addr, PYR_ADDR_TYPE_WOTS);
+    wotspk_addr = set_type(wotspk_addr, PYR_ADDR_TYPE_WOTSPK);
+    hashtree_addr = set_type(hashtree_addr, PYR_ADDR_TYPE_HASHTREE);
+
+    /* Spill registers in preparation for upcoming hash operations. */
+    s_root = root;
+    s_next_ref = next_ref;
+    s_sk_psd = sk_psd;
+    s_s = s;
+    s_t = t;
+
+    /* The subtree index that we end at. */
+    end_layer = 1;
+    end_layer <<= t;
+    
+    idx = 0;
+    s_end_layer = end_layer;
+    while(idx < end_layer) {
+        s_idx = idx;
+
+	/* Pre HPRG */
+	s = s_s;
+    	idx_offset = idx;
+	idx_offset += s;
+
+	/* Treehash iterations access the leaves of the tree in succession.  */
+    	wotspk_addr = set_keypair_addr(wotspk_addr, idx_offset);
+	wots_addr = set_keypair_addr(wots_addr, idx_offset);
+
+	/* Generate the next WOTS Seed and FSG Reference. */
+	/* i =?= (1 << t) - 1 */
+	end_layer = s_end_layer;
+	t32 = end_layer;
+	t32 -= 1;
+	idx = s_idx;
+	sk_psd = s_sk_psd;
+	if(idx == t32){
+	    next_ref = s_next_ref;
+	    S, next_ref = fsg(S, next_ref, R, sk_psd, wots_addr);	  
+	    s_next_ref = next_ref;
+	} else {
+	    S, R = fsg_comp(S, R, sk_psd, wots_addr);
+	}
+	
+	/* Generate the leaf node from the WOTS Seed. */
+	sk_psd = s_sk_psd;
+	current[PYR_N:PYR_N], wots_addr = gen_leaf_wots(current[PYR_N:PYR_N], S,
+	                                                sk_psd, wotspk_addr, wots_addr);
+
+ 	/* We do not need to mask idx before the call to nto, because idx is an offset, 
+           not the absolute position in the tree. idx is the absolute position in the subtree 
+	   that we compute: |--s--|--idx--|--2^(h/d) - (s + 2^t)--| */
+        j = 0;
+ 	idx = s_idx;
+	n = nto(idx);
+	s_n = n;
+	while(j < n){ /* while we have a right node */
+	    s_j = j;
+	    
+	    tree_idx = s_idx;
+	    s = s_s;	    
+	    tree_idx += s;
+	    tree_idx >>= j;
+	    tree_idx >>= 1;
+	    hashtree_addr = set_tree_index(hashtree_addr, tree_idx);	    
+	    hashtree_addr = set_tree_height(hashtree_addr, j);
+
+	    offset = (64u)j;
+	    offset *= PYR_N;
+	    for i = 0 to PYR_N {
+	    	t8 = th_stack[i + (int) offset];
+		current[i] = t8;
+	    }
+
+	    /* Combine the nodes that are of equal height. */
+	    sk_psd = s_sk_psd;
+	    current = thash2r(current, sk_psd, hashtree_addr);
+
+	    j = s_j;
+	    n = s_n;
+	    j += 1;
+	} /* A left node is now right: store it on the "stack". */
+
+	offset = (64u)j;
+	offset *= PYR_N;
+	for i = 0 to PYR_N {
+	    t8 = current[PYR_N+i];
+	    th_stack[i + (int) offset] = t8; 
+	}
+	
+	idx = s_idx;
+	end_layer = s_end_layer;
+	idx += 1;
+    }
+
+    next_ref = s_next_ref;
+
+    /* Finally, copy the root at height t from the top of stack into root. */
+    root = s_root;
+    t = s_t;
+    offset = (64u)t;
+    offset *= PYR_N;
+    root = TH_cpy_N(root, th_stack, offset);
+    
+    return root, next_ref;
+}
+
+
+/* Compound Treehash: the FSG reference is directly overwritten, to avoid copies. 
+   Once a single Treehash implementation can achieve both use cases, this one becomes obsolete. */
+#[returnaddress="stack"]
+fn treehash_comp(reg ptr u8[PYR_N] root, reg ptr u8[PYR_N] ref,
+	         reg const ptr u8[PYR_N] sk_psd,
+	         reg u32 s, reg u32 t, reg const ptr u32[8] subtree_addr)
+-> reg ptr u8[PYR_N], reg ptr u8[PYR_N]
+{
+    inline int i;
+    reg u8 t8;
+    reg u32 j n tree_idx t32 idx_offset idx end_layer;
+    reg u64 offset;
+    stack u8[STACK_SIZE] th_stack;
+    stack u8[PYR_N] R S;
+    stack u8[2*PYR_N] current;
+    stack u32[8] wots_addr wotspk_addr hashtree_addr;
+    
+    stack u32 s_j s_n s_idx s_end_layer;
+    
+    stack u32 s_s s_t;
+    stack ptr u8[PYR_N] s_root s_ref s_sk_psd;
+
+    R = cpy_N(R, ref);
+
+    /* Zero-initialize the addresses. */
+    wots_addr = init_addr(wots_addr);
+    wotspk_addr = init_addr(wotspk_addr);
+    hashtree_addr = init_addr(hashtree_addr);
+
+    /* Copy hypertree layer, tree index. */
+    wots_addr = copy_subtree_addr(wots_addr, subtree_addr);
+    wotspk_addr = copy_subtree_addr(wotspk_addr, subtree_addr);
+    hashtree_addr = copy_subtree_addr(hashtree_addr, subtree_addr);
+
+    /* Set the type fields, conform the type of invocation that _addr is for. */
+    wots_addr = set_type(wots_addr, PYR_ADDR_TYPE_WOTS);
+    wotspk_addr = set_type(wotspk_addr, PYR_ADDR_TYPE_WOTSPK);
+    hashtree_addr = set_type(hashtree_addr, PYR_ADDR_TYPE_HASHTREE);
+
+    /* Spill registers in preparation for upcoming hash operations. */
+    s_root = root;
+    s_ref = ref;
+    s_sk_psd = sk_psd;
+    s_s = s;
+    s_t = t;
+
+    /* The subtree index that we end at. */
+    end_layer = 1;
+    end_layer <<= t;
+    
+    idx = 0;
+    s_end_layer = end_layer;
+    while(idx < end_layer) {
+        s_idx = idx;
+
+	/* Pre HPRG */
+	s = s_s;
+    	idx_offset = idx;
+	idx_offset += s;
+
+	/* Treehash iterations access the leaves of the tree in succession.  */
+    	wotspk_addr = set_keypair_addr(wotspk_addr, idx_offset);
+	wots_addr = set_keypair_addr(wots_addr, idx_offset);
+
+	/* Generate the next WOTS Seed and FSG Reference. */
+	/* i =?= (1 << t) - 1 */
+	end_layer = s_end_layer;
+	t32 = end_layer;
+	t32 -= 1;
+	idx = s_idx;
+	sk_psd = s_sk_psd;
+	if(idx == t32){
+	    ref = s_ref;
+	    S, ref = fsg(S, ref, R, sk_psd, wots_addr);	  
+	    s_ref = ref;
+	} else {
+	    S, R = fsg_comp(S, R, sk_psd, wots_addr);
+	}
+	
+	/* Generate the leaf node from the WOTS Seed. */
+	sk_psd = s_sk_psd;
+	current[PYR_N:PYR_N], wots_addr = gen_leaf_wots(current[PYR_N:PYR_N], S,
+	                                                sk_psd, wotspk_addr, wots_addr);
+
+ 	/* We do not need to mask idx before the call to nto, because idx is an offset, 
+           not the absolute position in the tree. idx is the absolute position in the subtree 
+	   that we compute: |--s--|--idx--|--2^(h/d) - (s + 2^t)--| */
+        j = 0;
+ 	idx = s_idx;
+	n = nto(idx);
+	s_n = n;
+	while(j < n){ /* while we have a right node */
+	    s_j = j;
+	    
+	    tree_idx = s_idx;
+	    s = s_s;	    
+	    tree_idx += s;
+	    tree_idx >>= j;
+	    tree_idx >>= 1;
+	    hashtree_addr = set_tree_index(hashtree_addr, tree_idx);	    
+	    hashtree_addr = set_tree_height(hashtree_addr, j);
+
+	    offset = (64u)j;
+	    offset *= PYR_N;
+	    for i = 0 to PYR_N {
+	    	t8 = th_stack[i + (int) offset];
+		current[i] = t8;
+	    }
+
+	    /* Combine the nodes that are of equal height. */
+	    sk_psd = s_sk_psd;
+	    current = thash2r(current, sk_psd, hashtree_addr);
+
+	    j = s_j;
+	    n = s_n;
+	    j += 1;
+	} /* A left node is now right: store it on the "stack". */
+
+	offset = (64u)j;
+	offset *= PYR_N;
+	for i = 0 to PYR_N {
+	    t8 = current[PYR_N+i];
+	    th_stack[i + (int) offset] = t8; 
+	}
+	
+	idx = s_idx;
+	end_layer = s_end_layer;
+	idx += 1;
+    }
+
+    ref = s_ref;
+
+    /* Finally, copy the root at height t from the top of stack into root. */
+    root = s_root;
+    t = s_t;
+    offset = (64u)t;
+    offset *= PYR_N;
+    root = TH_cpy_N(root, th_stack, offset);
+    
+    return root, ref;
+}

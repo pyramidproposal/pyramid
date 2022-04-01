@@ -1,0 +1,15 @@
+require "pyramid_params.jahh"
+
+export fn sanity_check_jazz(reg u64 paramp)
+{
+    [paramp + 0]  = PYR_N;
+    [paramp + 8]  = PYR_FULL_HEIGHT;
+    [paramp + 16] = PYR_D;
+    [paramp + 24] = PYR_WOTS_W;
+    [paramp + 32] = PYR_ADDR_BYTES;
+    [paramp + 40] = PYR_IDX_BYTES;
+    [paramp + 48] = PYR_WOTS_LOGW;
+    [paramp + 56] = PYR_WOTS_LEN1;
+    [paramp + 64] = PYR_WOTS_LEN2;
+    [paramp + 72] = PYR_TREE_HEIGHT;
+}
