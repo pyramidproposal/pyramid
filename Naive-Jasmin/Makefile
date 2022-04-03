@@ -45,7 +45,7 @@ test_fips202_keccak_inc_absorb_256_HMSG_CONST_INLEN \
 test_fips202_keccak_inc \
 test_fips202_shake256_PYR_N_variable
 
-XMSS = \
+PYR = \
 test_pyr_address \
 test_pyr_hash_shake256 \
 test_pyr_thash_shake256_simple \
@@ -58,7 +58,7 @@ test_crypto_sign_seed_keypair \
 test_crypto_sign_signature \
 test_crypto_sign_verify
 
-TESTS = $(FIPS202) $(XMSS) $(CRYPTO)
+TESTS = $(FIPS202) $(PYR) $(CRYPTO)
 
 default: prep test	
 
