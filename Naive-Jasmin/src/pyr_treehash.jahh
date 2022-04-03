@@ -28,7 +28,7 @@ inline fn nto(reg u32 a) -> reg u32
 
 #[returnaddress="stack"]
 fn treehash(reg ptr u8[PYR_N] root, reg ptr u8[AUTH_BYTES] auth_path,
-	     reg const ptr u8[PYR_N] sk_seed, reg const ptr u8[PYR_N] pub_seed, reg u32 leaf_idx,
+	     reg const ptr u8[PYR_N] sk_seed_, reg const ptr u8[PYR_N] pub_seed_, reg u32 leaf_idx,
 	     reg const ptr u32[8] subtree_addr)
 -> reg ptr u8[PYR_N], reg ptr u8[AUTH_BYTES]
 {
@@ -48,6 +48,11 @@ fn treehash(reg ptr u8[PYR_N] root, reg ptr u8[AUTH_BYTES] auth_path,
     stack ptr u8[AUTH_BYTES] s_auth_path;
     stack ptr u8[PYR_N] s_sk_seed;
     stack ptr u8[PYR_N] s_pub_seed;
+
+    /* "Fix" for compatibility with first release (typing error). */
+    reg ptr u8[PYR_N] sk_seed pub_seed;
+    sk_seed = sk_seed_; pub_seed = pub_seed_;
+
 
     /* Zero-initialize the addresses. */
     wots_addr = init_addr(wots_addr);

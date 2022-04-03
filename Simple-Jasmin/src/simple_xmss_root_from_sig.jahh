@@ -10,9 +10,9 @@ require "pyr_compute_root.jahh"
    We chose to stick with the Simple reference code for now.  */
 #[returnaddress="stack"]
 fn xmss_root_from_sig_comp(reg ptr u8[PYR_N] root, reg u32 idx_leaf,
-	                   reg const ptr u8[PYR_XMSS_BYTES] sig,
-			   reg const ptr u8[PYR_N] sk_psd,
-	     	      	   reg const ptr u32[8] subtree_addr)
+	                   reg ptr u8[PYR_XMSS_BYTES] sig_,
+			   reg ptr u8[PYR_N] sk_psd_,
+	     	      	   reg ptr u32[8] subtree_addr_)
 -> reg ptr u8[PYR_N]
 {
     inline int offset;
@@ -23,10 +23,16 @@ fn xmss_root_from_sig_comp(reg ptr u8[PYR_N] root, reg u32 idx_leaf,
     stack u8[PYR_N] leaf;
 
     stack ptr u8[PYR_N] s_root;
-    stack const ptr u8[PYR_XMSS_BYTES] s_sig;
-    stack const ptr u8[PYR_N] s_sk_psd;
+    stack ptr u8[PYR_XMSS_BYTES] s_sig;
+    stack ptr u8[PYR_N] s_sk_psd;
     stack u32 s_idx_leaf;
-    stack const ptr u32[8] s_subtree_addr;
+    stack ptr u32[8] s_subtree_addr;
+
+    /* "Fix" for compatibility with first release (typing error). */
+    reg ptr u8[PYR_XMSS_BYTES] sig;
+    reg ptr u8[PYR_N] sk_psd;
+    reg ptr u32[8] subtree_addr;
+    sig = sig_; sk_psd = sk_psd_; subtree_addr = subtree_addr_;
 
     wots_addr = init_addr(wots_addr);
     wots_addr = copy_subtree_addr(wots_addr, subtree_addr);

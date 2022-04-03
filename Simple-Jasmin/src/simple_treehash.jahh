@@ -38,7 +38,7 @@ inline fn get_tau(reg u32 idx_leaf) -> reg u32
 }
 
 /* Copy a node located at offset out of the stack. */
-inline fn TH_cpy_N(reg ptr u8[PYR_N] out, reg const ptr u8[STACK_SIZE] in, reg u64 offset)
+inline fn TH_cpy_N(reg ptr u8[PYR_N] out, reg ptr u8[STACK_SIZE] in, reg u64 offset)
 -> reg ptr u8[PYR_N]
 {
     inline int i;
@@ -53,8 +53,8 @@ inline fn TH_cpy_N(reg ptr u8[PYR_N] out, reg const ptr u8[STACK_SIZE] in, reg u
 
 #[returnaddress="stack"]
 fn treehash(reg ptr u8[PYR_N] root, reg ptr u8[PYR_N] next_ref,
-	     reg const ptr u8[PYR_N] sk_ssd, reg const ptr u8[PYR_N] sk_psd,
-	     reg u32 s, reg u32 t, reg const ptr u32[8] subtree_addr)
+	     reg ptr u8[PYR_N] sk_ssd, reg ptr u8[PYR_N] sk_psd_,
+	     reg u32 s, reg u32 t, reg ptr u32[8] subtree_addr)
 -> reg ptr u8[PYR_N], reg ptr u8[PYR_N]
 {
     inline int i;
@@ -70,6 +70,10 @@ fn treehash(reg ptr u8[PYR_N] root, reg ptr u8[PYR_N] next_ref,
     
     stack u32 s_s s_t;
     stack ptr u8[PYR_N] s_root s_next_ref s_sk_psd;
+
+    /* "Fix" for compatibility with first release (typing error). */
+    reg ptr u8[PYR_N] sk_psd;
+    sk_psd = sk_psd_;
 
     R = cpy_N(R, sk_ssd);
 
@@ -196,8 +200,8 @@ fn treehash(reg ptr u8[PYR_N] root, reg ptr u8[PYR_N] next_ref,
    Once a single Treehash implementation can achieve both use cases, this one becomes obsolete. */
 #[returnaddress="stack"]
 fn treehash_comp(reg ptr u8[PYR_N] root, reg ptr u8[PYR_N] ref,
-	         reg const ptr u8[PYR_N] sk_psd,
-	         reg u32 s, reg u32 t, reg const ptr u32[8] subtree_addr)
+	         reg ptr u8[PYR_N] sk_psd_,
+	         reg u32 s, reg u32 t, reg ptr u32[8] subtree_addr)
 -> reg ptr u8[PYR_N], reg ptr u8[PYR_N]
 {
     inline int i;
@@ -213,6 +217,10 @@ fn treehash_comp(reg ptr u8[PYR_N] root, reg ptr u8[PYR_N] ref,
     
     stack u32 s_s s_t;
     stack ptr u8[PYR_N] s_root s_ref s_sk_psd;
+
+    /* "Fix" for compatibility with first release (typing error). */
+    reg ptr u8[PYR_N] sk_psd;
+    sk_psd = sk_psd_;
 
     R = cpy_N(R, ref);
 

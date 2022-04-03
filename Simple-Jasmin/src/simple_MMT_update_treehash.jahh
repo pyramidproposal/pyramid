@@ -21,7 +21,7 @@ require "simple_MMT_state_format.jahh"
    The Treehash instance shares a stack which is accessed through state. 
    State is an MMT state that operates on hypertree layer layer. */
 #[returnaddress="stack"]
-fn MMT_update_treehash(reg const ptr u8[PYR_N] sk_psd, reg u32 target_height,
+fn MMT_update_treehash(reg const ptr u8[PYR_N] sk_psd_, reg u32 target_height,
                        reg ptr u8[MMT_SIZE] state, reg u32 layer)
 -> reg ptr u8[MMT_SIZE] 
 {
@@ -39,6 +39,10 @@ fn MMT_update_treehash(reg const ptr u8[PYR_N] sk_psd, reg u32 target_height,
     stack u32 s_target_height;
     stack ptr u8[MMT_SIZE] s_state;
     stack ptr u8[PYR_N] s_sk_psd;
+
+    /* "Fix" for compatibility with first release (typing error). */
+    reg ptr u8[PYR_N] sk_psd;
+    sk_psd = sk_psd_;
 
     /* sk_psd and target_height are RO; 
        target height is the index of the Treehash instance that is updated. */

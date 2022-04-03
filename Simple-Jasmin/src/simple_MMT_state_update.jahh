@@ -163,7 +163,7 @@ inline fn update_ghost_instance(reg ptr u8[MMT_SIZE] state, reg u64 idx64,
 
 /* Forwards the FSG references in an MMT state. Opt to reuse variables from MMT_state_update
    to increase readability; idx_leaf can be derived from idx_sig. */
-inline fn MMT_fwd_refs(reg ptr u8[MMT_SIZE] state, reg const ptr u8[PYR_SK_CORE_BYTES] sk,
+inline fn MMT_fwd_refs(reg ptr u8[MMT_SIZE] state, reg ptr u8[PYR_SK_CORE_BYTES] sk_,
                        stack u64 s_idx_sig, stack u32 s_idx_leaf, stack u32 s_layer)
 -> reg ptr u8[MMT_SIZE]
 {
@@ -173,7 +173,11 @@ inline fn MMT_fwd_refs(reg ptr u8[MMT_SIZE] state, reg const ptr u8[PYR_SK_CORE_
     reg u32 th_ref_idx_leaf tmp32 layer;
     reg u64 th_ref_idx th_ref_idx_tree max_layer_idx;
     
-    stack const ptr u8[PYR_SK_CORE_BYTES] s_sk;
+    stack ptr u8[PYR_SK_CORE_BYTES] s_sk;
+
+    /* "Fix" for compatibility with first release (typing error). */
+    reg ptr u8[PYR_SK_CORE_BYTES] sk;
+    sk = sk_;
 
     /* RO spill */
     s_sk = sk;

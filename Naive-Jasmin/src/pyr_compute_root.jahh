@@ -37,7 +37,7 @@ inline fn fill_N(reg ptr u8[PYR_N] out, reg ptr u8[AUTH_BYTES] auth_path, reg u3
 */
 #[returnaddress="stack"]
 fn compute_root(reg ptr u8[PYR_N] root, reg ptr u8[PYR_N] leaf, 
-                reg ptr u8[AUTH_BYTES] auth_path, reg ptr u8[PYR_N] pub_seed,
+                reg ptr u8[AUTH_BYTES] auth_path_, reg ptr u8[PYR_N] pub_seed_,
 		reg u32 s, reg u32 t, reg ptr u32[8] subtree_addr)
 -> reg ptr u8[PYR_N]
 {
@@ -49,6 +49,11 @@ fn compute_root(reg ptr u8[PYR_N] root, reg ptr u8[PYR_N] leaf,
     stack u32 s_j s_n s_offset_cpy;    
     stack ptr u8[PYR_N] s_root s_pub_seed;
     stack ptr u8[AUTH_BYTES] s_auth_path;
+
+    /* "Fix" for compatibility with first release (typing error). */
+    reg ptr u8[PYR_N] pub_seed;
+    reg ptr u8[AUTH_BYTES] auth_path;
+    pub_seed = pub_seed_; auth_path = auth_path_;
 
     /* Spill registers in preparation for upcoming hash operations. */
     /* The spilled variables are all RO. */

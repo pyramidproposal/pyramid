@@ -10,7 +10,7 @@ require "simple_MMT_state_format.jahh"
     Generate an MMT state from the core of a Pyramid secret key.
 */
 #[returnaddress="stack"]
-fn MMT_stategen(reg ptr u8[MMT_SIZE] state, reg const ptr u8[PYR_SK_CORE_BYTES] sk,
+fn MMT_stategen(reg ptr u8[MMT_SIZE] state, reg ptr u8[PYR_SK_CORE_BYTES] sk_,
        	  	reg u32 layer)
 -> reg ptr u8[MMT_SIZE]
 {
@@ -22,7 +22,11 @@ fn MMT_stategen(reg ptr u8[MMT_SIZE] state, reg const ptr u8[PYR_SK_CORE_BYTES] 
     reg u32 s t;
 
     stack ptr u8[MMT_SIZE] s_state;
-    stack const ptr u8[PYR_SK_CORE_BYTES] s_sk;
+    stack ptr u8[PYR_SK_CORE_BYTES] s_sk;
+
+    /* "Fix" for compatibility with first release (typing error). */
+    reg ptr u8[PYR_SK_CORE_BYTES] sk;
+    sk = sk_;
 
     s_state = state;
     s_sk = sk;

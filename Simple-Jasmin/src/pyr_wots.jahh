@@ -4,8 +4,8 @@ require "pyr_hash_shake256.jahh"
 
 /* Expands inseed using the simplified PRF construction into PYR_WOTS_LEN seeds (outseeds). */
 #[returnaddress="stack"]
-fn expand_seed(reg ptr u8[PYR_WOTS_PK_BYTES] outseeds, reg ptr u8[PYR_N] inseed,
-               reg ptr u8[PYR_N] pub_seed, reg ptr u32[8] addr)
+fn expand_seed(reg ptr u8[PYR_WOTS_PK_BYTES] outseeds, reg ptr u8[PYR_N] inseed_,
+               reg ptr u8[PYR_N] pub_seed_, reg ptr u32[8] addr)
 -> reg ptr u8[PYR_WOTS_PK_BYTES]
 {
     inline int i j;
@@ -13,6 +13,10 @@ fn expand_seed(reg ptr u8[PYR_WOTS_PK_BYTES] outseeds, reg ptr u8[PYR_N] inseed,
 
     stack ptr u8[PYR_N] s_inseed;
     stack ptr u8[PYR_N] s_pub_seed;
+
+    /* "Fix" for compatibility with first release (typing error). */
+    reg ptr u8[PYR_N] inseed pub_seed;
+    inseed = inseed_; pub_seed = pub_seed_;
 
     addr_ = init_addr(addr_);
     addr_ = copy_keypair_addr(addr_, addr);
@@ -35,7 +39,7 @@ fn expand_seed(reg ptr u8[PYR_WOTS_PK_BYTES] outseeds, reg ptr u8[PYR_N] inseed,
 /* in/out from the C implementation are merged for clarity. */
 #[returnaddress="stack"]
 fn gen_chain(reg ptr u8[PYR_N] inout, reg u32 start, reg u32 steps,
-             reg ptr u8[PYR_N] pub_seed, reg ptr u32[8] addr)
+             reg ptr u8[PYR_N] pub_seed_, reg ptr u32[8] addr)
 -> reg ptr u8[PYR_N], reg ptr u32[8]
 {
     inline int i;
@@ -44,6 +48,10 @@ fn gen_chain(reg ptr u8[PYR_N] inout, reg u32 start, reg u32 steps,
     stack u32 s_j s_n;
     stack ptr u8[PYR_N] s_pub_seed;
     stack ptr u32[8] s_addr;
+
+    /* "Fix" for compatibility with first release (typing error). */
+    reg ptr u8[PYR_N] pub_seed;
+    pub_seed = pub_seed_;
 
     s_pub_seed = pub_seed;
     s_addr = addr;
@@ -182,7 +190,7 @@ fn chain_lengths(reg ptr u32[PYR_WOTS_LEN] lengths, reg ptr u8[PYR_N] msg)
 /* Generates a WOTS pk by expanding seed and advancing each chain w - 1 steps. */
 #[returnaddress="stack"]
 fn wots_pkgen(reg ptr u8[PYR_WOTS_PK_BYTES] pk, reg ptr u8[PYR_N] seed,
-                     reg ptr u8[PYR_N] pub_seed, reg ptr u32[8] addr)
+                     reg ptr u8[PYR_N] pub_seed_, reg ptr u32[8] addr)
 -> reg ptr u8[PYR_WOTS_PK_BYTES], reg ptr u32[8]
 {
     inline int i;
@@ -190,6 +198,10 @@ fn wots_pkgen(reg ptr u8[PYR_WOTS_PK_BYTES] pk, reg ptr u8[PYR_N] seed,
 
     stack ptr u8[PYR_N] s_pub_seed;
     stack ptr u32[8] s_addr;
+
+    /* "Fix" for compatibility with first release (typing error). */
+    reg ptr u8[PYR_N] pub_seed;
+    pub_seed = pub_seed_;
 
     s_pub_seed = pub_seed;
     s_addr = addr;
@@ -215,7 +227,7 @@ fn wots_pkgen(reg ptr u8[PYR_WOTS_PK_BYTES] pk, reg ptr u8[PYR_N] seed,
    a variable number of times, conform the message msg. */
 #[returnaddress="stack"]
 fn wots_sign(reg ptr u8[PYR_WOTS_BYTES] sig, reg ptr u8[PYR_N] msg,
-                    reg ptr u8[PYR_N] seed, reg ptr u8[PYR_N] pub_seed, reg ptr u32[8] addr)
+                    reg ptr u8[PYR_N] seed, reg ptr u8[PYR_N] pub_seed_, reg ptr u32[8] addr)
 -> reg ptr u8[PYR_WOTS_BYTES], reg ptr u32[8]
 {
     inline int i;
@@ -224,6 +236,10 @@ fn wots_sign(reg ptr u8[PYR_WOTS_BYTES] sig, reg ptr u8[PYR_N] msg,
 
     stack ptr u8[PYR_N] s_pub_seed;
     stack ptr u32[8] s_addr;
+
+    /* "Fix" for compatibility with first release (typing error). */
+    reg ptr u8[PYR_N] pub_seed;
+    pub_seed = pub_seed_;
 
     s_pub_seed = pub_seed;
     s_addr = addr;
@@ -251,7 +267,7 @@ fn wots_sign(reg ptr u8[PYR_WOTS_BYTES] sig, reg ptr u8[PYR_N] msg,
    a variable number of times, conform the message msg. */
 #[returnaddress="stack"]
 fn wots_pk_from_sig(reg ptr u8[PYR_WOTS_PK_BYTES] pk, reg ptr u8[PYR_WOTS_BYTES] sig,
-                           reg ptr u8[PYR_N] msg, reg ptr u8[PYR_N] pub_seed, reg ptr u32[8] addr)
+                    reg ptr u8[PYR_N] msg, reg ptr u8[PYR_N] pub_seed_, reg ptr u32[8] addr)
 -> reg ptr u8[PYR_WOTS_PK_BYTES], reg ptr u32[8]
 {
     inline int i j;
@@ -261,6 +277,10 @@ fn wots_pk_from_sig(reg ptr u8[PYR_WOTS_PK_BYTES] pk, reg ptr u8[PYR_WOTS_BYTES]
 
     stack ptr u8[PYR_N] s_pub_seed;
     stack ptr u32[8] s_addr;
+
+    /* "Fix" for compatibility with first release (typing error). */
+    reg ptr u8[PYR_N] pub_seed;
+    pub_seed = pub_seed_; 
 
     s_pub_seed = pub_seed;
     s_addr = addr;
@@ -294,14 +314,19 @@ fn wots_pk_from_sig(reg ptr u8[PYR_WOTS_PK_BYTES] pk, reg ptr u8[PYR_WOTS_BYTES]
 /* Not inlined: thashLEN is used in two locations. */
 #[returnaddress="stack"]
 fn gen_leaf_wots(reg ptr u8[PYR_N] leaf, reg ptr u8[PYR_N] sk_seed,
-                            reg ptr u8[PYR_N] pub_seed,
-			    reg ptr u32[8] wotspk_addr, reg ptr u32[8] ots_addr)
+                 reg ptr u8[PYR_N] pub_seed_,
+		 reg ptr u32[8] wotspk_addr_, reg ptr u32[8] ots_addr)
 -> reg ptr u8[PYR_N], reg ptr u32[8]
 {
     stack u8[PYR_WOTS_PK_BYTES] pk;
 
     stack ptr u8[PYR_N] s_leaf s_pub_seed;
     stack ptr u32[8] s_ots_addr s_wotspk_addr;
+
+    /* "Fix" for compatibility with first release (typing error). */
+    reg ptr u8[PYR_N] pub_seed;
+    reg ptr u32[8] wotspk_addr;
+    pub_seed = pub_seed_; wotspk_addr = wotspk_addr_;
 
     s_leaf = leaf;
     s_pub_seed = pub_seed;
