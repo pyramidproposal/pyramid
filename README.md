@@ -1,3 +1,9 @@
+# Disclaimer
+
+Please note that the Jasmin implementations in branch `main`
+target- and were tested using an older version of the branch `glob_array3` of Jasmin.
+The implementations in branch `post-release` aim for compatibility with a more recent version.
+
 # Pyramid Proposal
 
 This repository contains four implementations conform the Pyramid proposal.
